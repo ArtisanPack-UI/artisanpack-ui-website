@@ -12,3 +12,14 @@
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: 'Montserrat', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+    --color-brand-bg: #111827;
+    --color-brand-text: #ffffff;
+    --color-brand-section: #1f2937;
+    --color-brand-primary: #2962ff;
+    --color-brand-secondary: #00e5ff;
+    --color-brand-accent: #e040fb;
+}

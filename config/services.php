@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'kit' => [
+        'api_key' => env('KIT_API_KEY'),
+        'form_id' => env('KIT_FORM_ID'),
+        'base_url' => env('KIT_BASE_URL', 'https://api.kit.com/v4'),
+    ],
+
 ];
