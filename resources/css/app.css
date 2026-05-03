@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+@import '@artisanpack-ui/tokens/css';
+
+@source '../views';
+@source '../js';
+@source '../../node_modules/@artisanpack-ui/react/dist';
+@source '../../node_modules/@artisanpack-ui/react-laravel/dist';
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+
+@plugin "daisyui" {
+    themes: light --default, dark --prefersdark;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));

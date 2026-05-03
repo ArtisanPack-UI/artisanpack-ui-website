@@ -1,0 +1,59 @@
+name: artisanpack-ui
+icon: images/artisanpack-ui-3x.png
+processes:
+  Pail:
+    command: php artisan pail
+    working_dir: null
+    auto_start: true
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  Queue:
+    command: php artisan queue:work
+    working_dir: null
+    auto_start: true
+    auto_restart: true
+    restart_when_changed: []
+    env: {}
+  Scheduler:
+    command: php artisan schedule:work
+    working_dir: null
+    auto_start: true
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  npm:build:
+    command: npm run build
+    working_dir: null
+    auto_start: true
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  npm:dev:
+    command: npm run dev
+    working_dir: null
+    auto_start: true
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  Composer Run Dev:
+    command: composer run dev
+    working_dir: null
+    auto_start: true
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  Pint:
+    command: vendor/bin/pint --test
+    working_dir: null
+    auto_start: true
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  Logs:
+    command: tail -n 50 -f storage/logs/laravel.log
+    working_dir: null
+    auto_start: true
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
