@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Head } from '@inertiajs/react';
 import SettingsLayout from '@/layouts/SettingsLayout';
+import { Card, PageHeader } from '@/components/admin/keystone';
 
 type Mode = 'light' | 'dark' | 'system';
 
@@ -22,6 +23,8 @@ function applyTheme(mode: Mode) {
     window.document.documentElement.setAttribute('data-theme', resolved);
 }
 
+const MODES: Mode[] = ['light', 'dark', 'system'];
+
 export default function Appearance() {
     const [mode, setMode] = useState<Mode>(() => {
         const saved = readSavedMode();
@@ -39,29 +42,32 @@ export default function Appearance() {
         <>
             <Head title="Appearance" />
 
-            <div>
-                <h1 className="text-2xl font-semibold">Appearance</h1>
-                <p className="text-base-content/70 text-sm">
-                    Choose how the app looks to you. Saved on this device only.
-                </p>
-            </div>
+            <PageHeader
+                title="Appearance"
+                description="Choose how the app looks to you. Saved on this device only."
+            />
 
-            <div className="card bg-base-100 shadow">
-                <div className="card-body">
-                    <div className="join">
-                        {(['light', 'dark', 'system'] as Mode[]).map((m) => (
+            <Card>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {MODES.map((m) => {
+                        const active = mode === m;
+                        return (
                             <button
                                 key={m}
                                 type="button"
                                 onClick={() => pick(m)}
-                                className={`btn join-item capitalize ${mode === m ? 'btn-primary' : ''}`}
+                                className={`rounded-lg border px-4 py-6 text-sm font-semibold capitalize transition-colors ${
+                                    active
+                                        ? 'border-primary bg-primary/10 text-primary'
+                                        : 'border-base-300/60 bg-base-100 text-base-content/80 hover:bg-base-200'
+                                }`}
                             >
                                 {m}
                             </button>
-                        ))}
-                    </div>
+                        );
+                    })}
                 </div>
-            </div>
+            </Card>
         </>
     );
 }

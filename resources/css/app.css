@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');
+
 @import 'tailwindcss';
-@import '@artisanpack-ui/tokens/css';
+@import '@artisanpack-ui/tokens/css' layer(base);
 
 @source '../views';
 @source '../js';
@@ -7,19 +9,296 @@
 @source '../../node_modules/@artisanpack-ui/react-laravel/dist';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 
+/*
+ * Dashboard widget grid spans. The renderer in
+ * `resources/js/components/admin/dashboard/DashboardGrid.tsx` builds
+ * `{sm,md,lg,xl}:{col,row}-span-{N}` strings dynamically from each widget's
+ * stored `grid_config`, so Tailwind needs the full set forced into the
+ * build via `@source inline()`.
+ */
+@source inline("{sm:,md:,lg:,xl:,}col-span-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline("{sm:,md:,lg:,xl:,}row-span-{1,2,3,4,5,6}");
+
 @plugin "daisyui" {
-    themes: light --default, dark --prefersdark;
+    themes: keystone-light --default, keystone-dark;
 }
 
-@custom-variant dark (&:where(.dark, .dark *));
+/*
+ * DaisyUI v5 themes must declare the field sizing + border/depth/noise
+ * tokens; component CSS uses them via `var(--border)`, `var(--depth)`,
+ * `var(--noise)`, `var(--size-field)`, `var(--size-selector)`. The
+ * input recipe in particular sets `border: var(--border) solid #0000`
+ * — a shorthand — so an undefined `--border` invalidates the whole
+ * declaration and the wrapper falls back to the base reset's
+ * `border-width: 0`, which is the regression in #90 (login + install
+ * wizard inputs render with no visible border). Mirror the values
+ * used by DaisyUI's built-in themes so every component gets the same
+ * baseline; keep the radius overrides custom to the Keystone look.
+ */
+@plugin 'daisyui/theme' {
+    name: 'keystone-light';
+    default: true;
+    color-scheme: light;
+    --color-base-100: #ffffff;
+    --color-base-200: #f1f5f9;
+    --color-base-300: #cbd5e1;
+    --color-base-content: #0f172a;
+    --color-primary: #0855b1;
+    --color-primary-content: #ffffff;
+    --color-secondary: #010e54;
+    --color-secondary-content: #ffffff;
+    --color-accent: #04d9ff;
+    --color-accent-content: #00022b;
+    --color-neutral: #1e293b;
+    --color-neutral-content: #f8fafc;
+    --color-info: #0ea5e9;
+    --color-info-content: #ffffff;
+    --color-success: #16a34a;
+    --color-success-content: #ffffff;
+    --color-warning: #f59e0b;
+    --color-warning-content: #1f2937;
+    --color-error: #dc2626;
+    --color-error-content: #ffffff;
+    --radius-selector: 0.75rem;
+    --radius-field: 0.5rem;
+    --radius-box: 0.875rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 1;
+    --noise: 0;
+}
+
+@plugin 'daisyui/theme' {
+    name: 'keystone-dark';
+    color-scheme: dark;
+    --color-base-100: #0f172a;
+    --color-base-200: #0b1220;
+    --color-base-300: #1e293b;
+    --color-base-content: #e2e8f0;
+    --color-primary: #3b82f6;
+    --color-primary-content: #ffffff;
+    --color-secondary: #0855b1;
+    --color-secondary-content: #ffffff;
+    --color-accent: #04d9ff;
+    --color-accent-content: #00022b;
+    --color-neutral: #020617;
+    --color-neutral-content: #e2e8f0;
+    --color-info: #38bdf8;
+    --color-info-content: #00022b;
+    --color-success: #22c55e;
+    --color-success-content: #00022b;
+    --color-warning: #fbbf24;
+    --color-warning-content: #1f2937;
+    --color-error: #f87171;
+    --color-error-content: #00022b;
+    --radius-selector: 0.75rem;
+    --radius-field: 0.5rem;
+    --radius-box: 0.875rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 1;
+    --noise: 0;
+}
+
+@custom-variant dark (&:where([data-theme='keystone-dark'], [data-theme='keystone-dark'] *));
 
 @theme {
-    --font-sans: 'Montserrat', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-sans:
+        'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+    --font-display:
+        'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+    --font-mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
 
-    --color-brand-bg: #111827;
-    --color-brand-text: #ffffff;
-    --color-brand-section: #1f2937;
-    --color-brand-primary: #2962ff;
-    --color-brand-secondary: #00e5ff;
-    --color-brand-accent: #e040fb;
+    --color-brand-cyan: #04d9ff;
+    --color-brand-royal: #0855b1;
+    --color-brand-navy: #010e54;
+    --color-brand-abyss: #00022b;
+}
+
+html,
+body {
+    font-family: var(--font-sans);
+}
+
+/* Chrome (sidebar + topbar) palette — light mode uses brand navy, dark mode keeps slate. */
+[data-theme='keystone-light'] {
+    --chrome-bg: #010e54;
+    --chrome-fg: rgba(255, 255, 255, 0.92);
+    --chrome-fg-muted: rgba(255, 255, 255, 0.65);
+    --chrome-fg-subtle: rgba(255, 255, 255, 0.45);
+    --chrome-border: rgba(255, 255, 255, 0.1);
+    --chrome-divider: rgba(255, 255, 255, 0.08);
+    --chrome-hover-bg: rgba(255, 255, 255, 0.06);
+    --chrome-active-bg: rgba(4, 217, 255, 0.18);
+    --chrome-active-fg: #04d9ff;
+    --chrome-input-bg: rgba(255, 255, 255, 0.08);
+    --chrome-input-border: rgba(255, 255, 255, 0.12);
+    --chrome-badge-bg: rgba(255, 255, 255, 0.1);
+    --chrome-mark-fg: rgba(255, 255, 255, 0.95);
+    --chrome-mark-fg-subtle: rgba(255, 255, 255, 0.55);
+}
+
+[data-theme='keystone-dark'] {
+    --chrome-bg: #0f172a;
+    --chrome-fg: rgba(226, 232, 240, 0.92);
+    --chrome-fg-muted: rgba(226, 232, 240, 0.65);
+    --chrome-fg-subtle: rgba(226, 232, 240, 0.45);
+    --chrome-border: rgba(255, 255, 255, 0.06);
+    --chrome-divider: rgba(255, 255, 255, 0.05);
+    --chrome-hover-bg: rgba(255, 255, 255, 0.04);
+    --chrome-active-bg: rgba(59, 130, 246, 0.18);
+    --chrome-active-fg: #3b82f6;
+    --chrome-input-bg: rgba(255, 255, 255, 0.04);
+    --chrome-input-border: rgba(255, 255, 255, 0.08);
+    --chrome-badge-bg: rgba(255, 255, 255, 0.06);
+    --chrome-mark-fg: rgba(226, 232, 240, 0.95);
+    --chrome-mark-fg-subtle: rgba(226, 232, 240, 0.55);
+}
+
+/*
+ * Admin loading progress bar.
+ *
+ * NProgress renders a single `#nprogress` element at the document root and
+ * is driven entirely by `resources/js/lib/admin/progress.ts` — Inertia's
+ * built-in progress driver is disabled in `resources/js/app.tsx` so a
+ * single coordinator owns both Inertia navigations and admin manual
+ * fetches. That means Inertia no longer injects its own `<style>` block,
+ * so all NProgress styling (positioning, colour, size) lives here.
+ *
+ * Scope: the bar is admin-only, but "admin-only" has two flavors during a
+ * page transition:
+ *
+ * - `data-admin` — an admin layout is currently mounted. Set/cleared in
+ *   `progress.ts` via `acquireAdminMarker()` / `releaseAdminMarker()`.
+ * - `data-nav-target` — a progress-bearing Inertia visit is in flight and
+ *   heading TO an admin or public route. Set at `router.on('start')`,
+ *   cleared at `router.on('finish')` (both in `progress.ts`; prefetches
+ *   and `showProgress:false` visits are excluded).
+ *
+ * The two markers together honor the DESTINATION rather than the source of
+ * a navigation. Without `data-nav-target`, a public→admin visit would stay
+ * hidden until the destination layout mounted (i.e. after the request had
+ * loaded), and an admin→public visit would stay visible until the source
+ * layout unmounted.
+ */
+#nprogress {
+    pointer-events: none;
+}
+
+#nprogress .bar {
+    background: var(--color-primary);
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1031;
+    width: 100%;
+    height: 3px;
+}
+
+/* Trailing blur that reads as motion at the leading edge of the bar. */
+#nprogress .peg {
+    display: block;
+    position: absolute;
+    right: 0;
+    width: 100px;
+    height: 100%;
+    box-shadow: 0 0 10px var(--color-primary), 0 0 5px var(--color-primary);
+    opacity: 1;
+    transform: rotate(3deg) translate(0, -4px);
+}
+
+/*
+ * Backstop: hide when neither the mounted layout nor an in-flight
+ * destination is admin (public → public, sitting on public), and hide
+ * during any admin→public transition even while the source layout is
+ * still marking the body as admin.
+ */
+body:not([data-admin]):not([data-nav-target='admin']) #nprogress {
+    display: none;
+}
+
+body[data-nav-target='public'] #nprogress {
+    display: none;
+}
+
+/*
+ * Collapsible card open/close animation. Uses the widely-supported
+ * grid-template-rows `0fr` → `1fr` interpolation pattern: a single
+ * grid row whose track size animates from collapsed to fully sized,
+ * while the child sets `min-height: 0` and `overflow: hidden` so the
+ * content clips during transition. Triggered by a `data-open`
+ * attribute toggled in the React component so the animation runs on
+ * both directions (the native `<details>` `open` attribute flips
+ * synchronously and would otherwise skip the close transition).
+ */
+.collapsible-card__body {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+        grid-template-rows 220ms ease,
+        opacity 160ms ease;
+}
+
+.collapsible-card__body[data-open='true'] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+
+.collapsible-card__body-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .collapsible-card__body {
+        transition: none;
+    }
+}
+
+/*
+ * Visual-editor embed height override.
+ *
+ * The package's `.ap-visual-editor__shell` pins `height: 100dvh` because
+ * it was designed for full-viewport mounts (which the site editor at
+ * `/admin/site-editor` still is — that one's a Blade view at the
+ * document root). Inside Keystone's page-edit screen the editor is an
+ * Inertia-hosted component sitting below the admin chrome + form
+ * fields, so the package's `100dvh` extends past the viewport and the
+ * inner inspector / inserter rails overflow with no visible scrollbar.
+ *
+ * The outer `.ap-visual-editor` mount div is constrained to a bounded
+ * height inline (see `resources/js/components/admin/VisualEditor.tsx`).
+ * This rule lets `__shell` follow that bounded parent instead of
+ * forcing the viewport — the increased specificity (`.ap-visual-editor
+ * .ap-visual-editor__shell`) wins over the package's single-class
+ * selector regardless of import order. Both `height` and `max-height`
+ * need overriding because the package pins both.
+ */
+.ap-visual-editor .ap-visual-editor__shell {
+    height: 100%;
+    max-height: 100%;
+}
+
+/*
+ * Force the inspector and block-library sidebar wrappers to scroll
+ * their own contents. The package's CSS chain
+ * (`flex: 1 1 auto` + `min-height: 0` + `overflow-y: auto` on the
+ * `__panel` / inner body) was designed for the full-page mount and
+ * doesn't trigger scrollbar visibility reliably when the editor is
+ * embedded inside a constrained host container — content technically
+ * fits at every level but the user can't reach the bottom because the
+ * inner element doesn't see the overflow. Forcing `overflow-y: auto`
+ * one level up (on the sidebar wrapper itself) restores scrollability
+ * without changing the package's layout intent.
+ */
+.ap-visual-editor .ap-visual-editor__sidebar--inspector,
+.ap-visual-editor .ap-visual-editor__sidebar--inserter,
+.ap-visual-editor .ap-visual-editor-inspector-sidebar,
+.ap-visual-editor .ap-visual-editor-inspector-sidebar__panel {
+    overflow-y: auto;
 }

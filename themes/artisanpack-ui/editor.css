@@ -1,0 +1,43 @@
+/*
+ * ArtisanPack UI — editor-only stylesheet
+ *
+ * Loaded ONLY into the site-editor canvas iframe (concatenated with style.css
+ * for the `GET /api/v1/global-styles/css` response — but NOT emitted on the
+ * public front-end via the `@cmsGlobalStyles` Blade directive).
+ *
+ * Purpose: give the canvas the theme's dark ground WITHOUT leaking to
+ * inspector-panel mini-previews on the right sidebar. The emitter already
+ * writes `styles.color.background/text` to `:root` from theme.json — but that
+ * doesn't always cascade into the canvas <body>. Fill the gap here.
+ */
+
+/*
+ * Only paint the outermost iframe wrapper — NOT `.block-editor-block-list__layout`,
+ * which Gutenberg reuses on every nested container. Painting it there means every
+ * nested group inherits base color and shows through whenever a parent group has a
+ * different backgroundColor set (buttons inside a section-colored group render on
+ * top of a base-colored inner-layout strip).
+ */
+.editor-styles-wrapper {
+    background-color: var(--wp--preset--color--base);
+    color: var(--wp--preset--color--text);
+    font-family: var(--wp--preset--font-family--sans);
+    font-size: var(--wp--preset--font-size--body);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Headings inside the canvas — Gutenberg ships `.editor-styles-wrapper h*
+ * { color: #1e1e1e }` at higher specificity than a bare `h*`. Match the
+ * specificity here and force the theme's text color. */
+
+.editor-styles-wrapper h1.wp-block-heading,
+.editor-styles-wrapper h2.wp-block-heading,
+.editor-styles-wrapper h3.wp-block-heading,
+.editor-styles-wrapper h4.wp-block-heading,
+.editor-styles-wrapper h5.wp-block-heading,
+.editor-styles-wrapper h6.wp-block-heading {
+    color: var(--wp--preset--color--text);
+    font-family: var(--wp--preset--font-family--display);
+}

@@ -1,0 +1,34 @@
+{
+    "$schema": "https://schemas.wp.org/wp/6.8/theme.json",
+    "version": 3,
+    "title": "Light",
+
+    "settings": {
+        "color": {
+            "palette": [
+                { "slug": "primary",        "name": "Primary",        "color": "#1A237E" },
+                { "slug": "secondary",      "name": "Secondary",      "color": "#00838F" },
+                { "slug": "accent",         "name": "Accent",         "color": "#8E24AA" },
+                { "slug": "base",           "name": "Base",           "color": "#F9FAFB" },
+                { "slug": "section",        "name": "Section",        "color": "#FFFFFF" },
+                { "slug": "surface",        "name": "Surface",        "color": "#FFFFFF" },
+                { "slug": "surface-2",      "name": "Surface 2",      "color": "#F9FAFB" },
+                { "slug": "ink",            "name": "Ink",            "color": "#FFFFFF" },
+                { "slug": "text",           "name": "Text",           "color": "#000000" },
+                { "slug": "text-muted",     "name": "Text Muted",     "color": "#4B5563" },
+                { "slug": "text-subtle",    "name": "Text Subtle",    "color": "#9CA3AF" },
+                { "slug": "text-link",      "name": "Text Link",      "color": "#00838F" },
+                { "slug": "border",         "name": "Border",         "color": "#E5E7EB" },
+                { "slug": "border-subtle",  "name": "Border Subtle",  "color": "#EEF1F5" },
+                { "slug": "border-strong",  "name": "Border Strong",  "color": "#D1D5DB" }
+            ]
+        }
+    },
+
+    "styles": {
+        "color": {
+            "background": "var(--wp--preset--color--base)",
+            "text":       "var(--wp--preset--color--text)"
+        }
+    }
+}

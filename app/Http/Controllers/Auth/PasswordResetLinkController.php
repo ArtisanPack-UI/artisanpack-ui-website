@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
@@ -27,7 +29,7 @@ class PasswordResetLinkController extends Controller
 
         $status = Password::sendResetLink($request->only('email'));
 
-        if ($status === Password::ResetLinkSent) {
+        if (Password::ResetLinkSent === $status) {
             return back()->with('status', __($status));
         }
 

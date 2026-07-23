@@ -17,6 +17,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Version
+    |--------------------------------------------------------------------------
+    |
+    | The current installed version of Keystone. Read by the cms-framework
+    | Updates module to decide whether a newer release is available.
+    | Bumped in lockstep with `composer.json`'s `version` field as part of
+    | the release/x.y.z prepare-release flow.
+    |
+    */
+
+    'version' => '0.2.3',
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

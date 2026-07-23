@@ -1,25 +1,39 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/artisanpack-ui",
+    "name": "laravel/jmwd-keystone-cms",
     "type": "project",
     "description": "A Laravel application.",
     "keywords": [
         "laravel",
         "framework"
     ],
-    "version": "1.0.1",
+    "version": "0.2.3",
     "license": "MIT",
     "require": {
         "php": "^8.2",
         "artisanpack-ui/accessibility": "^2.1.0",
+        "artisanpack-ui/analytics": "^1.1",
+        "artisanpack-ui/cms-framework": "^2.5.3",
         "artisanpack-ui/core": "^1.0",
-        "artisanpack-ui/security": "^1.0",
+        "artisanpack-ui/forms": "^1.1",
+        "artisanpack-ui/media-library": "^1.2.1",
+        "artisanpack-ui/performance": "^1.0",
+        "artisanpack-ui/privacy": "^1.0",
+        "artisanpack-ui/rbac": "^1.0",
+        "artisanpack-ui/security": "^2.0",
+        "artisanpack-ui/security-auth": "^1.0",
+        "artisanpack-ui/security-full": "^1.0",
+        "artisanpack-ui/seo": "^1.1",
+        "artisanpack-ui/visual-editor": "^1.1.0",
         "inertiajs/inertia-laravel": "^2.0",
-        "laravel/framework": "^12.0",
-        "laravel/tinker": "^2.10.1",
+        "laravel/framework": "^13.0",
+        "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.16"
     },
     "require-dev": {
+        "artisanpack-ui/code-style": "^1.1",
+        "artisanpack-ui/code-style-pint": "^1.1",
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
         "fakerphp/faker": "^1.23",
         "laravel/boost": "^2.2",
         "laravel/pail": "^1.2.2",
@@ -28,14 +42,19 @@
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
         "pestphp/pest": "^4.6",
-        "pestphp/pest-plugin-laravel": "^4.1"
+        "pestphp/pest-plugin-browser": "^4.3",
+        "pestphp/pest-plugin-laravel": "^4.1",
+        "squizlabs/php_codesniffer": "^3.13"
     },
     "autoload": {
         "psr-4": {
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
-        }
+        },
+        "files": [
+            "app/helpers.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
@@ -73,7 +92,9 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
-        ]
+        ],
+        "lint": "./vendor/bin/pint --test",
+        "fix": "./vendor/bin/pint"
     },
     "extra": {
         "laravel": {
@@ -91,9 +112,10 @@
         "sort-packages": true,
         "allow-plugins": {
             "pestphp/pest-plugin": true,
-            "php-http/discovery": true
+            "php-http/discovery": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true
         }
     },
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
     "prefer-stable": true
 }

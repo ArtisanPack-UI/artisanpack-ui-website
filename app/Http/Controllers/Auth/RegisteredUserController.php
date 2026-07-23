@@ -1,15 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,24 +22,27 @@ class RegisteredUserController extends Controller
         return Inertia::render('auth/Register');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(RegisterRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
-        ]);
+        $validated = $request->validated();
+
+        $firstName = trim((string) $validated['first_name']);
+        $lastName  = trim((string) ($validated['last_name'] ?? ''));
+        $display   = '' !== $lastName ? $firstName.' '.$lastName : $firstName;
 
         $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
+            'first_name'   => $firstName,
+            'last_name'    => '' !== $lastName ? $lastName : null,
+            'username'     => Str::lower((string) $validated['username']),
+            'display_name' => $display,
+            'email'        => (string) $validated['email'],
+            'password'     => Hash::make((string) $validated['password']),
         ]);
 
         event(new Registered($user));
 
         Auth::login($user);
 
-        return to_route('dashboard');
+        return to_route('admin.dashboard');
     }
 }

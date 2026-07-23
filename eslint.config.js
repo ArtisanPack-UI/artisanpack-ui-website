@@ -43,6 +43,9 @@ export default tseslint.config(
             'resources/js/actions/**',
             'resources/js/routes/**',
             'resources/js/wayfinder/**',
+            // Published upstream sources (e.g. `vendor:publish --tag=media-react`).
+            // We do not own these and they are overwritten by re-publishing.
+            'resources/js/vendor/**',
             '**/*.config.*',
         ],
     },

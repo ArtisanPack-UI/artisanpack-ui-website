@@ -1,0 +1,390 @@
+/*
+ * jmwd-default brand stylesheet
+ *
+ * Layered on top of Gutenberg's `@wordpress/block-library/build-style/style.css`
+ * (loaded via the package-side `<x-ve-blocks-styles />` helper). The
+ * preset-token rules below resolve against the `--wp--preset--*`
+ * custom properties emitted from `theme.json` `settings.color.palette`
+ * and `settings.typography.fontSizes`, so editing the palette in the
+ * admin (or in theme.json directly) flows through to the public site
+ * without touching this file.
+ *
+ * Mobile-first. Two breakpoints:
+ *   - 640px: minor layout adjustments (header)
+ *   - 960px: full multi-column section layouts
+ */
+
+/* ----------------------------------------------------------------------
+   Root + element defaults — pick up theme.json `styles.elements`
+   ---------------------------------------------------------------------- */
+
+:root {
+    --jmwd-content-padding: clamp(1.25rem, 4vw, 2rem);
+    --jmwd-section-y: clamp(3rem, 8vw, 6rem);
+    --jmwd-radius: 0.5rem;
+
+    color-scheme: light;
+}
+
+body {
+    margin: 0;
+    background: var(--wp--preset--color--page, #ffffff);
+    color: var(--wp--preset--color--ink, #111827);
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+main {
+    display: block;
+}
+
+h1, h2, h3, h4, h5, h6,
+.wp-block-heading {
+    color: var(--wp--preset--color--primary, #0f172a);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.75rem;
+}
+
+a {
+    color: var(--wp--preset--color--accent, #2563eb);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+}
+
+a:hover,
+a:focus-visible {
+    text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+    outline: 2px solid var(--wp--preset--color--accent, #2563eb);
+    outline-offset: 3px;
+    border-radius: 2px;
+}
+
+/* ----------------------------------------------------------------------
+   Layout containers — bridge `layout.contentSize` / `layout.wideSize`
+   ---------------------------------------------------------------------- */
+
+.wp-block-group.is-layout-constrained,
+.wp-block-group.is-layout-flow,
+section.wp-block-group {
+    box-sizing: border-box;
+    padding-inline: var(--jmwd-content-padding);
+}
+
+.wp-block-group.is-layout-constrained > * {
+    margin-inline: auto;
+    max-width: 720px;
+}
+
+.wp-block-group.is-layout-constrained > .alignwide,
+.wp-block-group.is-layout-constrained > [data-align="wide"] {
+    max-width: 1200px;
+}
+
+.wp-block-group.is-layout-constrained > .alignfull,
+.wp-block-group.is-layout-constrained > [data-align="full"] {
+    max-width: none;
+    margin-inline: calc(var(--jmwd-content-padding) * -1);
+    padding-inline: var(--jmwd-content-padding);
+}
+
+/* ----------------------------------------------------------------------
+   Buttons — extend Gutenberg's `wp-block-button` with brand polish
+   ---------------------------------------------------------------------- */
+
+.wp-block-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.wp-block-buttons.is-content-justification-center {
+    justify-content: center;
+}
+
+.wp-block-button__link {
+    background-color: var(--wp--preset--color--accent, #2563eb);
+    color: var(--wp--preset--color--page, #ffffff);
+    border: 1px solid transparent;
+    border-radius: var(--jmwd-radius);
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.wp-block-button__link:hover {
+    background-color: var(--wp--preset--color--primary, #0f172a);
+}
+
+.wp-block-button__link:active {
+    transform: translateY(1px);
+}
+
+/*
+ * Buttons share the accent color with the page's global focus outline,
+ * so a same-color outline would vanish against the filled button. Give
+ * buttons a higher-contrast outline (background-coloured ring + accent
+ * outer) so the focus state is visible against both the filled and the
+ * outline variants.
+ */
+.wp-block-button__link:focus-visible {
+    outline: 2px solid var(--wp--preset--color--page, #ffffff);
+    outline-offset: -4px;
+    box-shadow: 0 0 0 4px var(--wp--preset--color--accent, #2563eb);
+}
+
+.wp-block-button.is-style-outline .wp-block-button__link:focus-visible,
+.wp-block-button__link.is-style-outline:focus-visible {
+    outline-color: var(--wp--preset--color--accent, #2563eb);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+.wp-block-button.is-style-outline .wp-block-button__link,
+.wp-block-button__link.is-style-outline {
+    background-color: transparent;
+    color: var(--wp--preset--color--accent, #2563eb);
+    border-color: var(--wp--preset--color--accent, #2563eb);
+}
+
+.wp-block-button.is-style-outline .wp-block-button__link:hover,
+.wp-block-button__link.is-style-outline:hover {
+    background-color: var(--wp--preset--color--accent-soft, #dbeafe);
+}
+
+/* ----------------------------------------------------------------------
+   Quote — soften Gutenberg's defaults to match the brand
+   ---------------------------------------------------------------------- */
+
+.wp-block-quote {
+    border-left: 4px solid var(--wp--preset--color--accent, #2563eb);
+    margin: 0;
+    padding: 0.5rem 1.25rem;
+    color: var(--wp--preset--color--muted, #475569);
+    font-style: italic;
+}
+
+.wp-block-quote cite {
+    display: block;
+    margin-top: 0.75rem;
+    color: var(--wp--preset--color--ink, #111827);
+    font-style: normal;
+    font-size: 0.875rem;
+}
+
+/* ----------------------------------------------------------------------
+   Separator — match brand border tone
+   ---------------------------------------------------------------------- */
+
+.wp-block-separator {
+    border-color: var(--wp--preset--color--divider, #e2e8f0);
+    max-width: 4rem;
+    margin: 2rem auto;
+}
+
+.wp-block-separator.is-style-wide {
+    max-width: none;
+}
+
+/* ----------------------------------------------------------------------
+   Lists — restore comfortable spacing
+   ---------------------------------------------------------------------- */
+
+ul, ol {
+    padding-inline-start: 1.25rem;
+}
+
+ul li,
+ol li {
+    margin-bottom: 0.25rem;
+}
+
+/* ----------------------------------------------------------------------
+   Sections — spacing rhythm for the seeded section classes
+   ---------------------------------------------------------------------- */
+
+.section-hero,
+.section-features,
+.section-services,
+.section-testimonials,
+.section-cta,
+.section-page-hero {
+    padding-block: var(--jmwd-section-y);
+}
+
+.section-hero h1,
+.section-page-hero h1 {
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    max-width: 18ch;
+    margin-inline: auto;
+}
+
+.section-hero .wp-block-paragraph {
+    max-width: 50ch;
+    margin-inline: auto;
+    color: var(--wp--preset--color--muted, #475569);
+}
+
+.section-cta {
+    background: var(--wp--preset--color--surface, #f8fafc);
+    border-block: 1px solid var(--wp--preset--color--divider, #e2e8f0);
+}
+
+.section-cta h2 {
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+}
+
+.section-features h3,
+.section-services h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.section-features .wp-block-paragraph,
+.section-services .wp-block-paragraph {
+    color: var(--wp--preset--color--muted, #475569);
+}
+
+.section-testimonials .wp-block-quote {
+    max-width: 42rem;
+    margin-inline: auto;
+    border-left-width: 4px;
+    font-size: 1.125rem;
+    line-height: 1.5;
+}
+
+/* ----------------------------------------------------------------------
+   Columns — Gutenberg ships `is-layout-flex` for `wp-block-columns`;
+   constrain the section's column gap for a tighter rhythm.
+   ---------------------------------------------------------------------- */
+
+.wp-block-columns {
+    gap: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.wp-block-column > * + * {
+    margin-top: 0.5rem;
+}
+
+/* ----------------------------------------------------------------------
+   Header — site-title + navigation
+   ---------------------------------------------------------------------- */
+
+.site-header {
+    padding-block: 1.25rem;
+    border-bottom: 1px solid var(--wp--preset--color--divider, #e2e8f0);
+    background: var(--wp--preset--color--page, #ffffff);
+}
+
+.site-header .wp-block-site-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+}
+
+.site-header .wp-block-site-title a {
+    color: var(--wp--preset--color--primary, #0f172a);
+    text-decoration: none;
+}
+
+.site-header .wp-block-navigation {
+    font-size: 0.95rem;
+}
+
+/*
+ * `.wp-block-navigation__container` (and its submenu sibling) inherit
+ * `gap` from the nav block per renderer-blade's bundled style.css.
+ * Upstream Gutenberg fills that gap in via a per-block inline `<style>`
+ * generated from `style.spacing.blockGap` and the theme's `blockGap`
+ * token. Renderer-blade doesn't run that emitter today, so the gap
+ * cascades to zero and the items render flush against each other on
+ * both the editor canvas and the front-end (Keystone #52).
+ *
+ * Set the gap on the nav block itself so the inherit chain in the
+ * package CSS has a real value to pick up. Falls back to the theme's
+ * `spacing.40` token (1.5rem) when `--wp--style--block-gap` isn't
+ * surfaced — same value as the theme.json `styles.spacing.blockGap`.
+ */
+.wp-block-navigation {
+    gap: var(--wp--style--block-gap, 1.5rem);
+}
+
+/*
+ * Let nav-link color flow from inheritance so a `has-{slug}-color`
+ * class on the parent `<nav>` reaches the link text. The previous
+ * version hard-coded the `<a>` color to `--wp--preset--color--ink`
+ * which is more specific than inheritance — picker choices on the
+ * nav block surfaced the right class but the link color stayed pinned
+ * to text (Keystone #53). `color: inherit` resolves to the nav's own
+ * color, which is what `has-{slug}-color !important` controls.
+ */
+.site-header .wp-block-navigation a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.site-header .wp-block-navigation a:hover,
+.site-header .wp-block-navigation a:focus-visible {
+    color: var(--wp--preset--color--accent, #2563eb);
+}
+
+/* ----------------------------------------------------------------------
+   Footer
+   ---------------------------------------------------------------------- */
+
+.site-footer {
+    padding-block: var(--jmwd-section-y);
+    background: var(--wp--preset--color--surface, #f8fafc);
+    border-top: 1px solid var(--wp--preset--color--divider, #e2e8f0);
+    font-size: 0.95rem;
+}
+
+.site-footer h3,
+.site-footer .wp-block-heading {
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--wp--preset--color--muted, #475569);
+}
+
+.site-footer ul {
+    list-style: none;
+    padding: 0;
+}
+
+.site-footer .wp-block-paragraph {
+    color: var(--wp--preset--color--muted, #475569);
+    font-size: 0.875rem;
+}
+
+/* ----------------------------------------------------------------------
+   Breakpoints
+   ---------------------------------------------------------------------- */
+
+@media (min-width: 640px) {
+    .site-header .wp-block-columns {
+        align-items: center;
+    }
+}
+
+@media (min-width: 960px) {
+    .wp-block-columns:not(.is-not-stacked-on-mobile) {
+        flex-wrap: nowrap;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.001ms !important;
+        animation-duration: 0.001ms !important;
+    }
+}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
@@ -17,7 +19,7 @@ class AuthenticatedSessionController extends Controller
     {
         return Inertia::render('auth/Login', [
             'canResetPassword' => Route::has('password.request'),
-            'status' => session('status'),
+            'status'           => session('status'),
         ]);
     }
 
@@ -27,7 +29,16 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        // Users with 2FA enabled must clear the OTP challenge before reaching
+        // the admin. The fresh session drops any prior `two_factor_verified`
+        // flag, so the challenge controller dispatches a new code.
+        $user = $request->user();
+
+        if (null !== $user && $user->hasTwoFactorEnabled()) {
+            return redirect()->route('two-factor.challenge');
+        }
+
+        return redirect()->intended(route('admin.dashboard', absolute: false));
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -36,6 +47,36 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+
+        return redirect('/');
+    }
+
+    /**
+     * GET-side logout entry point for the visual-editor `artisanpack/loginout`
+     * block (#522). The `signed` middleware on the route verifies the URL
+     * signature, so a logged-in visitor following the link cannot be coerced
+     * into logging out by a stale or attacker-supplied URL.
+     *
+     * Honors a `redirect_to` query parameter when the value is a same-host
+     * URL; otherwise falls back to the site root, matching {@see destroy}.
+     */
+    public function destroyViaLink(Request $request): RedirectResponse
+    {
+        Auth::guard('web')->logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        $redirectTo = $request->query('redirect_to');
+
+        if (is_string($redirectTo) && '' !== $redirectTo) {
+            $parsed = parse_url($redirectTo);
+
+            if (is_array($parsed)
+                && (! isset($parsed['host']) || $parsed['host'] === $request->getHost())) {
+                return redirect($redirectTo);
+            }
+        }
 
         return redirect('/');
     }

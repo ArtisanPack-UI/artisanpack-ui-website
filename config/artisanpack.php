@@ -7,6 +7,9 @@
  * You can safely modify these values to customize your application.
  */
 return [
+    'cms-framework' => [
+        'user_model' => \App\Models\User::class,
+    ],
     'accessibility' => [
         'wcag_thresholds' => [
             'aa' => 4.5,
@@ -25,7 +28,7 @@ return [
                 ],
                 'file' => [
                     'driver' => 'file',
-                    'path' => '/Users/jacobmartella/Herd/artisanpack-ui/storage/framework/cache/data/accessibility',
+                    'path' => '/Users/jacobmartella/Herd/jmwd-keystone-cms/storage/framework/cache/data/accessibility',
                 ],
                 'null' => [
                     'driver' => 'null',
@@ -51,9 +54,9 @@ return [
         ],
         'audit' => [
             'paths' => [
-                0 => '/Users/jacobmartella/Herd/artisanpack-ui/resources/views',
-                1 => '/Users/jacobmartella/Herd/artisanpack-ui/resources/css',
-                2 => '/Users/jacobmartella/Herd/artisanpack-ui/public/css',
+                0 => '/Users/jacobmartella/Herd/jmwd-keystone-cms/resources/views',
+                1 => '/Users/jacobmartella/Herd/jmwd-keystone-cms/resources/css',
+                2 => '/Users/jacobmartella/Herd/jmwd-keystone-cms/public/css',
             ],
             'include_extensions' => [
                 0 => 'css',
@@ -70,7 +73,7 @@ return [
             'formats' => [
                 0 => 'md',
             ],
-            'output_path' => '/Users/jacobmartella/Herd/artisanpack-ui/storage/app/a11y',
+            'output_path' => '/Users/jacobmartella/Herd/jmwd-keystone-cms/storage/app/a11y',
         ],
         'progress' => [
             'enabled' => true,

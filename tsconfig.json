@@ -19,5 +19,12 @@
             "@/*": ["resources/js/*"]
         }
     },
-    "include": ["resources/js/**/*.ts", "resources/js/**/*.tsx", "resources/js/**/*.d.ts"]
+    "include": ["resources/js/**/*.ts", "resources/js/**/*.tsx", "resources/js/**/*.d.ts"],
+    "exclude": [
+        "resources/js/vendor/**",
+        "node_modules/@artisanpack-ui/performance/**",
+        "node_modules/@artisanpack-ui/privacy/**",
+        "vendor/artisanpack-ui/performance/**",
+        "vendor/artisanpack-ui/privacy/**"
+    ]
 }

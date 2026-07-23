@@ -1,8 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\User;
+use ArtisanPackUI\Database\Seeders\PermissionsTableSeeder;
+use ArtisanPackUI\Database\Seeders\RolesTableSeeder;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -13,11 +17,21 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call([
+            RolesTableSeeder::class,
+            KeystoneRolesSeeder::class,
+            PermissionsTableSeeder::class,
+            KeystonePermissionsSeeder::class,
+        ]);
+
         // User::factory(10)->create();
 
         User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+            'first_name'   => 'Test',
+            'last_name'    => 'User',
+            'username'     => 'testuser',
+            'display_name' => 'Test User',
+            'email'        => 'test@example.com',
         ]);
     }
 }

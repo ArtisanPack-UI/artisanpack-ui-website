@@ -1,7 +1,9 @@
 import type { FormEvent, ReactNode } from 'react';
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { Button, Input } from '@artisanpack-ui/react/form';
 import SettingsLayout from '@/layouts/SettingsLayout';
+import { Card, PageHeader } from '@/components/admin/keystone';
+import { Field, PrimaryButton, TextInput } from '@/components/admin/keystone-form';
+import { update as updatePassword } from '@/routes/admin/password';
 
 interface SharedProps {
     flash: { success?: string };
@@ -19,7 +21,7 @@ export default function Password() {
 
     function submit(e: FormEvent) {
         e.preventDefault();
-        form.put('/settings/password', {
+        form.put(updatePassword().url, {
             preserveScroll: true,
             onSuccess: () => form.reset(),
             onError: () => {
@@ -33,54 +35,62 @@ export default function Password() {
         <>
             <Head title="Password" />
 
-            <div>
-                <h1 className="text-2xl font-semibold">Update password</h1>
-                <p className="text-base-content/70 text-sm">
-                    Use a long, random password to keep your account secure.
-                </p>
-            </div>
+            <PageHeader
+                title="Update password"
+                description="Use a long, random password to keep your account secure."
+            />
 
-            {flash.success && <div className="alert alert-success text-sm">{flash.success}</div>}
-
-            <form onSubmit={submit} className="card bg-base-100 shadow">
-                <div className="card-body space-y-4">
-                    <Input
-                        name="current_password"
-                        label="Current password"
-                        type="password"
-                        value={form.data.current_password}
-                        error={form.errors.current_password}
-                        onChange={(e) => form.setData('current_password', e.target.value)}
-                        autoComplete="current-password"
-                        required
-                    />
-                    <Input
-                        name="password"
-                        label="New password"
-                        type="password"
-                        value={form.data.password}
-                        error={form.errors.password}
-                        onChange={(e) => form.setData('password', e.target.value)}
-                        autoComplete="new-password"
-                        required
-                    />
-                    <Input
-                        name="password_confirmation"
-                        label="Confirm password"
-                        type="password"
-                        value={form.data.password_confirmation}
-                        error={form.errors.password_confirmation}
-                        onChange={(e) => form.setData('password_confirmation', e.target.value)}
-                        autoComplete="new-password"
-                        required
-                    />
-
-                    <div className="card-actions justify-end">
-                        <Button type="submit" color="primary" loading={form.processing}>
-                            Save
-                        </Button>
-                    </div>
+            {flash.success && (
+                <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
+                    {flash.success}
                 </div>
+            )}
+
+            <form onSubmit={submit}>
+                <Card>
+                    <div className="flex flex-col gap-5">
+                        <Field label="Current password" error={form.errors.current_password} required>
+                            <TextInput
+                                type="password"
+                                name="current_password"
+                                value={form.data.current_password}
+                                onChange={(e) => form.setData('current_password', e.target.value)}
+                                autoComplete="current-password"
+                                required
+                            />
+                        </Field>
+                        <Field label="New password" error={form.errors.password} required>
+                            <TextInput
+                                type="password"
+                                name="password"
+                                value={form.data.password}
+                                onChange={(e) => form.setData('password', e.target.value)}
+                                autoComplete="new-password"
+                                required
+                            />
+                        </Field>
+                        <Field
+                            label="Confirm password"
+                            error={form.errors.password_confirmation}
+                            required
+                        >
+                            <TextInput
+                                type="password"
+                                name="password_confirmation"
+                                value={form.data.password_confirmation}
+                                onChange={(e) => form.setData('password_confirmation', e.target.value)}
+                                autoComplete="new-password"
+                                required
+                            />
+                        </Field>
+                    </div>
+
+                    <div className="mt-5 flex items-center justify-end border-t border-base-300/60 pt-4">
+                        <PrimaryButton type="submit" loading={form.processing}>
+                            Save changes
+                        </PrimaryButton>
+                    </div>
+                </Card>
             </form>
         </>
     );

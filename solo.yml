@@ -1,29 +1,21 @@
-name: artisanpack-ui
-icon: images/artisanpack-ui-3x.png
+name: jmwd-keystone-cms
+icon: jmwd-logo-reverse@3x.png
+
+# Process naming convention:
+#   - Keystone-internal processes: capitalized, no prefix (Scheduler, Queue, Pint)
+#   - Sibling-package processes: <pkg>:<cmd> lowercase, e.g. rbac:pest, cms-fw:pint
+#
+# All sibling-package processes default to auto_start: false. Toggle them on
+# in Solo (press the process key) only for the wave you're actively working on.
+# When a wave finishes and the path-repo entry comes out of composer.json,
+# remove the matching processes here too — don't let stale entries accumulate.
+#
+# See plans/07-ecosystem-orchestrator.md §5 for the dev model.
+
 processes:
-  Pail:
-    command: php artisan pail
-    working_dir: null
-    auto_start: true
-    auto_restart: false
-    restart_when_changed: []
-    env: {}
-  Queue:
-    command: php artisan queue:work
-    working_dir: null
-    auto_start: true
-    auto_restart: true
-    restart_when_changed: []
-    env: {}
-  Scheduler:
-    command: php artisan schedule:work
-    working_dir: null
-    auto_start: true
-    auto_restart: false
-    restart_when_changed: []
-    env: {}
-  npm:build:
-    command: npm run build
+  # ── Keystone CMS (this app) ────────────────────────────────────────────
+  Composer Run Dev:
+    command: composer run dev
     working_dir: null
     auto_start: true
     auto_restart: false
@@ -36,24 +28,111 @@ processes:
     auto_restart: false
     restart_when_changed: []
     env: {}
-  Composer Run Dev:
-    command: composer run dev
+  Scheduler:
+    command: php artisan schedule:work
     working_dir: null
-    auto_start: true
+    auto_start: false
     auto_restart: false
+    restart_when_changed: []
+    env: {}
+  Queue:
+    command: php artisan queue:work
+    working_dir: null
+    auto_start: false
+    auto_restart: true
     restart_when_changed: []
     env: {}
   Pint:
     command: vendor/bin/pint --test
     working_dir: null
-    auto_start: true
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  Pail:
+    command: php artisan pail
+    working_dir: null
+    auto_start: false
     auto_restart: false
     restart_when_changed: []
     env: {}
   Logs:
     command: tail -n 50 -f storage/logs/laravel.log
     working_dir: null
-    auto_start: true
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+
+  # ── rbac (new package — gates Wave 1–3) ────────────────────────────────
+  # Activate when working on rbac issues #1–#12.
+  rbac:pest:
+    command: vendor/bin/pest --compact
+    working_dir: /Users/jacobmartella/Desktop/ArtisanPack UI Packages/rbac
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  rbac:pint:
+    command: vendor/bin/pint --test
+    working_dir: /Users/jacobmartella/Desktop/ArtisanPack UI Packages/rbac
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+
+  # ── security (Security 2.0 split — Wave 4) ─────────────────────────────
+  security:pest:
+    command: vendor/bin/pest --compact
+    working_dir: /Users/jacobmartella/Desktop/ArtisanPack UI Packages/security
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  security:pint:
+    command: vendor/bin/pint --test
+    working_dir: /Users/jacobmartella/Desktop/ArtisanPack UI Packages/security
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+
+  # ── cms-framework (Users-module RBAC migration — Wave 4) ───────────────
+  cms-fw:pest:
+    command: vendor/bin/pest --compact
+    working_dir: /Users/jacobmartella/Desktop/ArtisanPack UI Packages/cms-framework
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  cms-fw:pint:
+    command: vendor/bin/pint --test
+    working_dir: /Users/jacobmartella/Desktop/ArtisanPack UI Packages/cms-framework
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+
+  # ── visual-editor (V1 ship — Wave 8 deferred Keystone integration) ─────
+  # JS dev watcher only useful when iterating on the editor's dist bundle.
+  ve:pest:
+    command: vendor/bin/pest --compact
+    working_dir: /Users/jacobmartella/Desktop/ArtisanPack UI Packages/visual-editor
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  ve:pint:
+    command: vendor/bin/pint --test
+    working_dir: /Users/jacobmartella/Desktop/ArtisanPack UI Packages/visual-editor
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}
+  ve:dev:
+    command: npm run dev
+    working_dir: /Users/jacobmartella/Desktop/ArtisanPack UI Packages/visual-editor
+    auto_start: false
     auto_restart: false
     restart_when_changed: []
     env: {}

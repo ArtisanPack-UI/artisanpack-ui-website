@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests\Settings;
 
 use Illuminate\Foundation\Http\FormRequest;
@@ -19,7 +21,7 @@ class PasswordUpdateRequest extends FormRequest
     {
         return [
             'current_password' => ['required', 'string', 'current_password'],
-            'password' => ['required', 'string', Password::defaults(), 'confirmed'],
+            'password'         => ['required', 'string', Password::defaults(), 'confirmed'],
         ];
     }
 }

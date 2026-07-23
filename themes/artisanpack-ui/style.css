@@ -1,0 +1,146 @@
+/*
+ * ArtisanPack UI — front-end + canvas stylesheet
+ *
+ * Concatenated by cms-framework's GlobalStylesController::css() AFTER the
+ * emitter's `--wp--preset--*` custom properties and per-element/per-block
+ * rules. Also loaded on the public front-end via a <link rel>.
+ *
+ * Owns only what theme.json can't express:
+ *   1. Google-Fonts @font-face declarations (inlined — @import can't work at
+ *      this position in the concatenated response).
+ *   2. Atmospheric helpers (ap-*) referenced by templates + patterns.
+ *   3. Glow tokens the atmospheric helpers consume.
+ *
+ * Font Awesome is enqueued separately from Theme.php (see themes/artisanpack-ui/Theme.php).
+ * Editor-only overrides live in editor.css.
+ */
+
+/* ─── Fonts (inlined Google Fonts) ────────────────────────────────────── */
+
+@font-face { font-family: 'Poppins'; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/poppins/v24/pxiGyp8kv8JHgFVrJJLecnFHGPc.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: italic; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/poppins/v24/pxiDyp8kv8JHgFVrJJLmg1hlFd2JQEk.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: italic; font-weight: 600; font-display: swap; src: url(https://fonts.gstatic.com/s/poppins/v24/pxiDyp8kv8JHgFVrJJLmr19lFd2JQEk.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 300; font-display: swap; src: url(https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLDz8V15vEv-L.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/poppins/v24/pxiEyp8kv8JHgFVrFJXUdVNF.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLGT9V15vEv-L.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 600; font-display: swap; src: url(https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLEj6V15vEv-L.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLCz7V15vEv-L.woff2) format('woff2'); }
+@font-face { font-family: 'Poppins'; font-style: normal; font-weight: 800; font-display: swap; src: url(https://fonts.gstatic.com/s/poppins/v24/pxiByp8kv8JHgFVrLDD4V15vEv-L.woff2) format('woff2'); }
+@font-face { font-family: 'Space Mono'; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dNIFZifjKcF5UAWdDRYER8RXi4EwQ.woff2) format('woff2'); }
+@font-face { font-family: 'Space Mono'; font-style: italic; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dSIFZifjKcF5UAWdDRYERE_FeaHi6WZ3Q.woff2) format('woff2'); }
+@font-face { font-family: 'Space Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dPIFZifjKcF5UAWdDRUEN2Qlq6.woff2) format('woff2'); }
+@font-face { font-family: 'Space Mono'; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dMIFZifjKcF5UAWdDRaPpZYFeQGQyU.woff2) format('woff2'); }
+
+/* ─── Glow tokens ─────────────────────────────────────────────────────── */
+
+:root {
+    --ap-glow-primary:      0 0 24px color-mix(in oklab, var(--wp--preset--color--primary)   55%, transparent);
+    --ap-glow-secondary:    0 0 24px color-mix(in oklab, var(--wp--preset--color--secondary) 55%, transparent);
+    --ap-glow-accent:       0 0 24px color-mix(in oklab, var(--wp--preset--color--accent)    55%, transparent);
+    --ap-glow-primary-lg:   0 0 48px color-mix(in oklab, var(--wp--preset--color--primary)   55%, transparent);
+    --ap-glow-secondary-lg: 0 0 48px color-mix(in oklab, var(--wp--preset--color--secondary) 55%, transparent);
+    --ap-glow-accent-lg:    0 0 48px color-mix(in oklab, var(--wp--preset--color--accent)    55%, transparent);
+    --ap-glow-gradient:
+        0 0 32px color-mix(in oklab, var(--wp--preset--color--primary) 40%, transparent),
+        0 0 64px color-mix(in oklab, var(--wp--preset--color--accent)  30%, transparent);
+}
+
+/* ─── Buttons wrapper layout ─────────────────────────────────────────── */
+/*
+ * Fallback in case pattern markup lacks the `is-layout-flex` class Gutenberg
+ * normally emits. Non-destructive: only applies when the buttons wrapper
+ * doesn't already declare its own display.
+ */
+
+.wp-block-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+.wp-block-buttons.is-content-justification-center { justify-content: center; }
+.wp-block-buttons.is-content-justification-right  { justify-content: flex-end; }
+
+/* ─── Atmospheric helpers ─────────────────────────────────────────────── */
+
+/* .ap-starfield — layered radial-gradient starfield for hero backdrops. */
+.ap-starfield {
+    background-color: var(--wp--preset--color--ink);
+    background-image:
+        radial-gradient(1px 1px at 20% 30%,  rgba(255,255,255,0.85), transparent 40%),
+        radial-gradient(1px 1px at 70% 20%,  rgba(255,255,255,0.70), transparent 40%),
+        radial-gradient(1.5px 1.5px at 40% 70%, rgba(255,255,255,0.65), transparent 40%),
+        radial-gradient(1px 1px at 85% 65%,  rgba(255,255,255,0.55), transparent 40%),
+        radial-gradient(1px 1px at 15% 85%,  rgba(255,255,255,0.50), transparent 40%),
+        radial-gradient(1.5px 1.5px at 55% 45%, rgba(255,255,255,0.75), transparent 40%);
+    background-size: 100% 100%;
+}
+
+/* .ap-aurora — soft aurora bloom overlay. */
+.ap-aurora {
+    position: relative;
+    isolation: isolate;
+}
+.ap-aurora::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    z-index: -1;
+    background:
+        radial-gradient(60% 40% at 25% 30%, color-mix(in oklab, var(--wp--preset--color--primary)   40%, transparent) 0%, transparent 60%),
+        radial-gradient(50% 40% at 75% 40%, color-mix(in oklab, var(--wp--preset--color--accent)    35%, transparent) 0%, transparent 60%),
+        radial-gradient(40% 30% at 50% 80%, color-mix(in oklab, var(--wp--preset--color--secondary) 30%, transparent) 0%, transparent 60%);
+    filter: blur(40px);
+    pointer-events: none;
+}
+
+/* .ap-border-gradient — gradient-border glass box. */
+.ap-border-gradient {
+    position: relative;
+    background: color-mix(in oklab, var(--wp--preset--color--surface) 88%, transparent);
+    border-radius: 12px;
+    padding: 2rem;
+    isolation: isolate;
+}
+.ap-border-gradient::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    padding: 2px;
+    border-radius: inherit;
+    background: linear-gradient(115deg, var(--wp--preset--color--primary) 0%, var(--wp--preset--color--secondary) 50%, var(--wp--preset--color--accent) 100%);
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+}
+
+/* .ap-divider-neon — neon rule under editorial page headers. */
+.ap-divider-neon {
+    height: 2px;
+    border: 0;
+    background: linear-gradient(90deg, var(--wp--preset--color--primary) 0%, var(--wp--preset--color--secondary) 50%, var(--wp--preset--color--accent) 100%);
+    box-shadow: var(--ap-glow-primary);
+    border-radius: 999px;
+}
+
+/* .ap-header-blur — sticky, blurred site-header chrome. */
+.ap-header-blur {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: color-mix(in oklab, var(--wp--preset--color--ink) 72%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--wp--preset--color--border-subtle);
+}
+
+/* .ap-gradient-text — text painted with the neon gradient. */
+.ap-gradient-text {
+    background: linear-gradient(115deg, var(--wp--preset--color--primary) 0%, var(--wp--preset--color--secondary) 50%, var(--wp--preset--color--accent) 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    color: transparent;
+}

@@ -12,7 +12,7 @@ interface LoginProps {
 }
 
 export default function Login({ canResetPassword, status }: LoginProps) {
-    const form = useForm({ email: '', password: '', remember: false });
+    const form = useForm({ login: '', password: '', remember: false });
 
     function submit(e: React.FormEvent) {
         e.preventDefault();
@@ -31,13 +31,13 @@ export default function Login({ canResetPassword, status }: LoginProps) {
 
                     <form onSubmit={submit} className="flex flex-col gap-4 mt-4">
                         <Input
-                            name="email"
-                            label="Email address"
-                            type="email"
-                            value={form.data.email}
-                            error={form.errors.email}
-                            onChange={(e) => form.setData('email', e.target.value)}
-                            autoComplete="email"
+                            name="login"
+                            label="Username or email"
+                            type="text"
+                            value={form.data.login}
+                            error={form.errors.login}
+                            onChange={(e) => form.setData('login', e.target.value)}
+                            autoComplete="username"
                             autoFocus
                             required
                         />

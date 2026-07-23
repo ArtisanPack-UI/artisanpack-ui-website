@@ -1,0 +1,29 @@
+<?php
+
+/**
+ * Title: Page Header — Boxed
+ * Slug: artisanpack-ui/page-header-boxed
+ * Categories: header, featured
+ * Synced: no
+ * Description: Title + lead inside a gradient-border glass box.
+ */
+?>
+<!-- wp:artisanpack/group {"tagName":"section","layout":{"type":"constrained"},"style":{"spacing":{"padding":{"top":"var:preset|spacing|60","bottom":"var:preset|spacing|60"}}}} -->
+<section class="wp-block-artisanpack-group wp-block-group " style="padding-top:var(--wp--preset--spacing--60);padding-bottom:var(--wp--preset--spacing--60)">
+<!-- wp:artisanpack/group {"className":"ap-border-gradient","layout":{"type":"constrained"}} -->
+<div class="wp-block-artisanpack-group wp-block-group is-layout-constrained ap-border-gradient">
+<!-- wp:artisanpack/paragraph {"style":{"typography":{"fontFamily":"var:preset|font-family|mono","fontSize":"var:preset|font-size|xsmall","letterSpacing":"0.16em","textTransform":"uppercase"}},"textColor":"text-muted"} -->
+<p class="has-text-muted-color has-text-color" style="font-family:var(--wp--preset--font-family--mono);font-size:var(--wp--preset--font-size--xsmall);letter-spacing:0.16em;text-transform:uppercase">Eyebrow</p>
+<!-- /wp:artisanpack/paragraph -->
+
+<!-- wp:artisanpack/heading {"level":1,"className":"","style":{"typography":{"fontFamily":"var:preset|font-family|display","fontWeight":"600","letterSpacing":"-0.02em","lineHeight":"1.15"}}} -->
+<h1 class="wp-block-heading" style="font-family:var(--wp--preset--font-family--display);font-weight:600;letter-spacing:-0.02em;line-height:1.15">Boxed page title</h1>
+<!-- /wp:artisanpack/heading -->
+
+<!-- wp:artisanpack/paragraph {"textColor":"text-muted","style":{"typography":{"lineHeight":"1.65"}}} -->
+<p class="has-text-muted-color has-text-color" style="line-height:1.65">Lead text sits inside a gradient-bordered glass box.</p>
+<!-- /wp:artisanpack/paragraph -->
+</div>
+<!-- /wp:artisanpack/group -->
+</section>
+<!-- /wp:artisanpack/group -->

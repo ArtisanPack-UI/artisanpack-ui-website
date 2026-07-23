@@ -1,0 +1,121 @@
+{
+    "$schema": "https://schemas.wp.org/wp/6.8/theme.json",
+    "name": "JMWD Default",
+    "slug": "jmwd-default",
+    "version": "0.3.0",
+    "description": "Reference theme for Keystone CMS and jacobmartellawebdesign.com. Establishes the manifest pattern future SBDF Pro themes follow.",
+    "author": "Jacob Martella",
+    "screenshot": "screenshot.png",
+    "settings": {
+        "color": {
+            "palette": [
+                { "slug": "primary", "name": "Primary", "color": "#0f172a" },
+                { "slug": "accent", "name": "Accent", "color": "#2563eb" },
+                { "slug": "accent-soft", "name": "Accent soft", "color": "#dbeafe" },
+                { "slug": "page", "name": "Page", "color": "#ffffff" },
+                { "slug": "surface", "name": "Surface", "color": "#f8fafc" },
+                { "slug": "ink", "name": "Ink", "color": "#111827" },
+                { "slug": "muted", "name": "Muted", "color": "#475569" },
+                { "slug": "divider", "name": "Divider", "color": "#e2e8f0" }
+            ]
+        },
+        "typography": {
+            "fontSizes": [
+                { "slug": "small", "name": "Small", "size": "0.875rem" },
+                { "slug": "medium", "name": "Medium", "size": "1rem" },
+                { "slug": "large", "name": "Large", "size": "1.25rem" },
+                { "slug": "x-large", "name": "Extra Large", "size": "2rem" },
+                { "slug": "xx-large", "name": "Display", "size": "3rem" }
+            ],
+            "fontFamilies": [
+                {
+                    "slug": "sans",
+                    "name": "Sans",
+                    "fontFamily": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+                },
+                {
+                    "slug": "serif",
+                    "name": "Serif",
+                    "fontFamily": "ui-serif, Georgia, 'Times New Roman', Times, serif"
+                },
+                {
+                    "slug": "mono",
+                    "name": "Mono",
+                    "fontFamily": "ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Monaco, Consolas, monospace"
+                }
+            ],
+            "fontStyle": true,
+            "fontWeight": true,
+            "lineHeight": true,
+            "letterSpacing": true,
+            "textTransform": true,
+            "textDecoration": true
+        },
+        "border": {
+            "color": true,
+            "radius": true,
+            "style": true,
+            "width": true
+        },
+        "spacing": {
+            "spacingSizes": [
+                { "slug": "20", "name": "Tight", "size": "0.5rem" },
+                { "slug": "30", "name": "Small", "size": "1rem" },
+                { "slug": "40", "name": "Medium", "size": "1.5rem" },
+                { "slug": "50", "name": "Large", "size": "3rem" },
+                { "slug": "60", "name": "X-Large", "size": "5rem" },
+                { "slug": "70", "name": "Section", "size": "7rem" }
+            ],
+            "padding": true,
+            "margin": true,
+            "blockGap": true,
+            "units": ["px", "em", "rem", "%", "vh", "vw"]
+        },
+        "layout": {
+            "contentSize": "720px",
+            "wideSize": "1200px"
+        }
+    },
+    "styles": {
+        "color": {
+            "background": "#ffffff",
+            "text": "#111827"
+        },
+        "typography": {
+            "fontFamily": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+            "lineHeight": "1.6"
+        },
+        "spacing": {
+            "blockGap": "1.5rem"
+        },
+        "elements": {
+            "heading": {
+                "typography": {
+                    "fontFamily": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+                    "fontWeight": "700",
+                    "lineHeight": "1.2"
+                },
+                "color": { "text": "#0f172a" }
+            },
+            "link": {
+                "color": { "text": "#2563eb" }
+            },
+            "button": {
+                "color": { "background": "#2563eb", "text": "#ffffff" },
+                "border": { "radius": "0.5rem" },
+                "spacing": {
+                    "padding": { "top": "0.75rem", "right": "1.5rem", "bottom": "0.75rem", "left": "1.5rem" }
+                }
+            }
+        }
+    },
+    "templateParts": [
+        { "name": "header", "title": "Header", "area": "header" },
+        { "name": "footer", "title": "Footer", "area": "footer" }
+    ],
+    "menus": {
+        "locations": {
+            "primary": "Primary Menu"
+        }
+    }
+}

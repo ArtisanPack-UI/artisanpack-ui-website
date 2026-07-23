@@ -1,0 +1,298 @@
+{
+    "$schema": "https://keystone.jacobmartella.com/schemas/theme-seed-v1.json",
+    "version": 1,
+    "settings": {
+        "site.title": "Jacob Martella Web Design",
+        "site.description": "Hand-crafted small-business sites built on Keystone CMS."
+    },
+    "templateParts": [
+        {
+            "slug": "header",
+            "area": "header",
+            "title": "Header",
+            "description": "Site header with logo and primary navigation.",
+            "blocks": [
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "header", "layout": { "type": "constrained" }, "className": "site-header" },
+                    "innerBlocks": [
+                        {
+                            "name": "core/columns",
+                            "attributes": { "verticalAlignment": "center" },
+                            "innerBlocks": [
+                                {
+                                    "name": "core/column",
+                                    "attributes": { "width": "33.33%" },
+                                    "innerBlocks": [
+                                        { "name": "core/site-logo", "attributes": { "width": 48, "isLink": true }, "innerBlocks": [] },
+                                        { "name": "core/site-title", "attributes": { "level": 1 }, "innerBlocks": [] }
+                                    ]
+                                },
+                                {
+                                    "name": "core/column",
+                                    "attributes": { "width": "66.66%" },
+                                    "innerBlocks": [
+                                        {
+                                            "name": "core/navigation",
+                                            "attributes": { "__unstableLocation": "primary", "layout": { "type": "flex", "justifyContent": "right" } },
+                                            "innerBlocks": []
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "slug": "footer",
+            "area": "footer",
+            "title": "Footer",
+            "description": "Site footer with link columns and copyright.",
+            "blocks": [
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "footer", "layout": { "type": "constrained" }, "className": "site-footer" },
+                    "innerBlocks": [
+                        {
+                            "name": "core/columns",
+                            "attributes": { "isStackedOnMobile": true },
+                            "innerBlocks": [
+                                {
+                                    "name": "core/column",
+                                    "attributes": { "verticalAlignment": null },
+                                    "innerBlocks": [
+                                        { "name": "core/heading", "attributes": { "level": 3, "content": "Studio" }, "innerBlocks": [] },
+                                        {
+                                            "name": "core/list",
+                                            "attributes": { "ordered": false },
+                                            "innerBlocks": [
+                                                { "name": "core/list-item", "attributes": { "content": "About" }, "innerBlocks": [] },
+                                                { "name": "core/list-item", "attributes": { "content": "Services" }, "innerBlocks": [] },
+                                                { "name": "core/list-item", "attributes": { "content": "Contact" }, "innerBlocks": [] }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "core/column",
+                                    "attributes": { "verticalAlignment": null },
+                                    "innerBlocks": [
+                                        { "name": "core/heading", "attributes": { "level": 3, "content": "Connect" }, "innerBlocks": [] },
+                                        {
+                                            "name": "core/list",
+                                            "attributes": { "ordered": false },
+                                            "innerBlocks": [
+                                                { "name": "core/list-item", "attributes": { "content": "GitHub" }, "innerBlocks": [] },
+                                                { "name": "core/list-item", "attributes": { "content": "LinkedIn" }, "innerBlocks": [] }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        { "name": "core/separator", "attributes": { "opacity": "alpha-channel" }, "innerBlocks": [] },
+                        {
+                            "name": "core/paragraph",
+                            "attributes": { "align": "center", "content": "© 2026 Jacob Martella Web Design. All rights reserved." },
+                            "innerBlocks": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "menus": [
+        {
+            "slug": "primary",
+            "name": "Primary Menu",
+            "location": "primary",
+            "items": [
+                { "type": "link", "label": "Home", "url": "/" },
+                { "type": "link", "label": "Services", "url": "/services" },
+                { "type": "link", "label": "About", "url": "/about" },
+                { "type": "link", "label": "Contact", "url": "/contact" }
+            ]
+        }
+    ],
+    "pages": [
+        {
+            "slug": "home",
+            "title": "Home",
+            "status": "published",
+            "isHomepage": true,
+            "order": 0,
+            "blocks": [
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "section", "layout": { "type": "constrained" }, "className": "section-hero" },
+                    "innerBlocks": [
+                        {
+                            "name": "core/heading",
+                            "attributes": { "level": 1, "textAlign": "center", "content": "Sites that read like a portfolio piece — and convert like a sales page." },
+                            "innerBlocks": []
+                        },
+                        {
+                            "name": "core/paragraph",
+                            "attributes": { "align": "center", "fontSize": "large", "content": "Small-business websites hand-built on Keystone CMS, deployed on Laravel Cloud." },
+                            "innerBlocks": []
+                        },
+                        {
+                            "name": "core/buttons",
+                            "attributes": { "layout": { "type": "flex", "justifyContent": "center" } },
+                            "innerBlocks": [
+                                { "name": "core/button", "attributes": { "text": "Start a project", "url": "/contact" }, "innerBlocks": [] },
+                                { "name": "core/button", "attributes": { "text": "See services", "url": "/services", "className": "is-style-outline" }, "innerBlocks": [] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "section", "layout": { "type": "constrained" }, "className": "section-features" },
+                    "innerBlocks": [
+                        { "name": "core/heading", "attributes": { "level": 2, "textAlign": "center", "content": "What you get" }, "innerBlocks": [] },
+                        {
+                            "name": "core/columns",
+                            "attributes": { "isStackedOnMobile": true },
+                            "innerBlocks": [
+                                {
+                                    "name": "core/column",
+                                    "attributes": { "verticalAlignment": null },
+                                    "innerBlocks": [
+                                        { "name": "core/heading", "attributes": { "level": 3, "content": "Editable end-to-end" }, "innerBlocks": [] },
+                                        { "name": "core/paragraph", "attributes": { "content": "Every section is a real block. Edit headlines, swap images, ship — no developer in the loop." }, "innerBlocks": [] }
+                                    ]
+                                },
+                                {
+                                    "name": "core/column",
+                                    "attributes": { "verticalAlignment": null },
+                                    "innerBlocks": [
+                                        { "name": "core/heading", "attributes": { "level": 3, "content": "Built to last" }, "innerBlocks": [] },
+                                        { "name": "core/paragraph", "attributes": { "content": "Laravel under the hood, themed templates on top. The same stack that runs your invoicing." }, "innerBlocks": [] }
+                                    ]
+                                },
+                                {
+                                    "name": "core/column",
+                                    "attributes": { "verticalAlignment": null },
+                                    "innerBlocks": [
+                                        { "name": "core/heading", "attributes": { "level": 3, "content": "Honest pricing" }, "innerBlocks": [] },
+                                        { "name": "core/paragraph", "attributes": { "content": "Fixed-fee site builds with a clear scope. No retainers, no surprise invoices." }, "innerBlocks": [] }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "section", "layout": { "type": "constrained" }, "className": "section-services" },
+                    "innerBlocks": [
+                        { "name": "core/heading", "attributes": { "level": 2, "textAlign": "center", "content": "Services" }, "innerBlocks": [] },
+                        {
+                            "name": "core/columns",
+                            "attributes": { "isStackedOnMobile": true },
+                            "innerBlocks": [
+                                {
+                                    "name": "core/column",
+                                    "attributes": { "verticalAlignment": null },
+                                    "innerBlocks": [
+                                        { "name": "core/heading", "attributes": { "level": 3, "content": "New site" }, "innerBlocks": [] },
+                                        { "name": "core/paragraph", "attributes": { "content": "Strategy → design → build → launch. Fixed-fee, three- to six-week engagements." }, "innerBlocks": [] }
+                                    ]
+                                },
+                                {
+                                    "name": "core/column",
+                                    "attributes": { "verticalAlignment": null },
+                                    "innerBlocks": [
+                                        { "name": "core/heading", "attributes": { "level": 3, "content": "Rescue + rebuild" }, "innerBlocks": [] },
+                                        { "name": "core/paragraph", "attributes": { "content": "Inherited a site that's slow, stale, or held together with duct tape? I'll triage and rebuild." }, "innerBlocks": [] }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "section", "layout": { "type": "constrained" }, "className": "section-testimonials" },
+                    "innerBlocks": [
+                        { "name": "core/heading", "attributes": { "level": 2, "textAlign": "center", "content": "Recent work" }, "innerBlocks": [] },
+                        {
+                            "name": "core/quote",
+                            "attributes": { "citation": "— Owner, local bistro" },
+                            "innerBlocks": [
+                                { "name": "core/paragraph", "attributes": { "content": "We finally have a site that loads fast and that we can update ourselves. The booking integration just works." }, "innerBlocks": [] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "section", "layout": { "type": "constrained" }, "className": "section-cta", "align": "full" },
+                    "innerBlocks": [
+                        { "name": "core/heading", "attributes": { "level": 2, "textAlign": "center", "content": "Ready to start?" }, "innerBlocks": [] },
+                        { "name": "core/paragraph", "attributes": { "align": "center", "content": "Tell me about your project. I respond within one business day." }, "innerBlocks": [] },
+                        {
+                            "name": "core/buttons",
+                            "attributes": { "layout": { "type": "flex", "justifyContent": "center" } },
+                            "innerBlocks": [
+                                { "name": "core/button", "attributes": { "text": "Get in touch", "url": "/contact" }, "innerBlocks": [] }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "slug": "about",
+            "title": "About",
+            "status": "published",
+            "order": 1,
+            "blocks": [
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "section", "layout": { "type": "constrained" }, "className": "section-page-hero" },
+                    "innerBlocks": [
+                        { "name": "core/heading", "attributes": { "level": 1, "content": "About Jacob" }, "innerBlocks": [] },
+                        { "name": "core/paragraph", "attributes": { "fontSize": "large", "content": "I build small-business websites that hold up." }, "innerBlocks": [] }
+                    ]
+                },
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "section", "layout": { "type": "constrained" } },
+                    "innerBlocks": [
+                        { "name": "core/heading", "attributes": { "level": 2, "content": "The work" }, "innerBlocks": [] },
+                        { "name": "core/paragraph", "attributes": { "content": "Jacob Martella Web Design is a one-person studio focused on hand-crafted sites for restaurants, clinics, services, and shopfronts. Every site is built on Keystone CMS — a Laravel-native CMS I author and maintain — so the platform under your business is the same platform under mine." }, "innerBlocks": [] },
+                        { "name": "core/separator", "attributes": { "opacity": "alpha-channel" }, "innerBlocks": [] },
+                        { "name": "core/heading", "attributes": { "level": 2, "content": "How I work" }, "innerBlocks": [] },
+                        {
+                            "name": "core/list",
+                            "attributes": { "ordered": false },
+                            "innerBlocks": [
+                                { "name": "core/list-item", "attributes": { "content": "One project at a time, so yours gets full attention." }, "innerBlocks": [] },
+                                { "name": "core/list-item", "attributes": { "content": "Fixed-fee scopes — you know what you're paying before we start." }, "innerBlocks": [] },
+                                { "name": "core/list-item", "attributes": { "content": "Your stack stays yours — open source, no proprietary lock-in." }, "innerBlocks": [] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "core/group",
+                    "attributes": { "tagName": "section", "layout": { "type": "constrained" }, "className": "section-cta" },
+                    "innerBlocks": [
+                        { "name": "core/heading", "attributes": { "level": 2, "textAlign": "center", "content": "Let's talk" }, "innerBlocks": [] },
+                        {
+                            "name": "core/buttons",
+                            "attributes": { "layout": { "type": "flex", "justifyContent": "center" } },
+                            "innerBlocks": [
+                                { "name": "core/button", "attributes": { "text": "Start a project", "url": "/contact" }, "innerBlocks": [] }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

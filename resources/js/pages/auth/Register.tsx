@@ -5,7 +5,9 @@ import AuthLayout from '@/layouts/AuthLayout';
 
 export default function Register() {
     const form = useForm({
-        name: '',
+        first_name: '',
+        last_name: '',
+        username: '',
         email: '',
         password: '',
         password_confirmation: '',
@@ -26,14 +28,33 @@ export default function Register() {
                     <h1 className="card-title justify-center">Create an account</h1>
 
                     <form onSubmit={submit} className="flex flex-col gap-4 mt-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <Input
+                                name="first_name"
+                                label="First name"
+                                value={form.data.first_name}
+                                error={form.errors.first_name}
+                                onChange={(e) => form.setData('first_name', e.target.value)}
+                                autoComplete="given-name"
+                                autoFocus
+                                required
+                            />
+                            <Input
+                                name="last_name"
+                                label="Last name"
+                                value={form.data.last_name}
+                                error={form.errors.last_name}
+                                onChange={(e) => form.setData('last_name', e.target.value)}
+                                autoComplete="family-name"
+                            />
+                        </div>
                         <Input
-                            name="name"
-                            label="Name"
-                            value={form.data.name}
-                            error={form.errors.name}
-                            onChange={(e) => form.setData('name', e.target.value)}
-                            autoComplete="name"
-                            autoFocus
+                            name="username"
+                            label="Username"
+                            value={form.data.username}
+                            error={form.errors.username}
+                            onChange={(e) => form.setData('username', e.target.value)}
+                            autoComplete="username"
                             required
                         />
                         <Input

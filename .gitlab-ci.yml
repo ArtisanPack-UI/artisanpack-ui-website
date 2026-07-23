@@ -1,0 +1,229 @@
+# Keystone CI — test + release pipeline.
+#
+# Test stage (every push / MR):
+#   - js_lint      : ESLint + TypeScript (allow_failure while Wayfinder is gitignored)
+#   - php_lint     : Pint (allow_failure — style only)
+#   - php_test     : Pest Unit + Feature suites (HARD GATE — regressions block the MR)
+#   - browser_test : Pest Browser suite — admin shell smoke tests via Playwright + Chromium (#35)
+#
+# Release stages (only on tags matching v\d+\.\d+\.\d+):
+#   - build_release : composer install --no-dev + npm build + zip + sha256
+#   - release       : create a GitLab Release with the zip + checksum as
+#                     release assets, consumed by cms-framework's
+#                     GitLabUpdateSource on client sites.
+#
+# The release artifact MUST be a `.zip` — cms-framework's
+# `ApplicationUpdateManager::extractUpdate()` uses PHP's `ZipArchive`
+# and has no tarball support. See the Phase 0 audit + #33 runbook.
+
+stages:
+  - test
+  - build_release
+  - release
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+  COMPOSER_NO_INTERACTION: "1"
+  COMPOSER_ALLOW_SUPERUSER: "1"
+  COMPOSER_CACHE_DIR: "$CI_PROJECT_DIR/.composer-cache"
+  # Pin DB defaults for the CI environment so `composer install`'s
+  # post-autoload-dump → `artisan package:discover` doesn't try to
+  # connect to MySQL (the config/database.php default) when a cms-framework
+  # service provider's boot() calls Schema::hasTable(...). Pest's
+  # phpunit.xml re-asserts sqlite + :memory: for the actual test run.
+  DB_CONNECTION: sqlite
+  DB_DATABASE: ":memory:"
+  # CI-only placeholder. Real keys are per-deployment.
+  APP_KEY: "base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+.npm_cache: &npm_cache
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - .npm/
+
+.composer_cache: &composer_cache
+  key:
+    files:
+      - composer.lock
+  paths:
+    - .composer-cache/
+    - vendor/
+
+.test_rules: &test_rules
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  - if: '$CI_COMMIT_TAG'
+    when: never
+  # Suppress the redundant branch pipeline while an MR is open for this
+  # branch — the merge_request_event rule above already covers it.
+  - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+    when: never
+  - if: '$CI_COMMIT_BRANCH'
+
+.release_rules: &release_rules
+  - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+
+js_lint:
+  stage: test
+  # cimg/php:8.4-node bundles PHP + Composer + Node so we can run
+  # `composer install` (pulls vendor/, including the visual-editor package
+  # that postinstall builds against) and `php artisan wayfinder:generate`
+  # (writes resources/js/actions + resources/js/routes, which lint and
+  # typecheck need to resolve `@/actions` / `@/routes` imports). The PHP-less
+  # node:22-alpine used to exit 127 in the `npm ci` postinstall chain.
+  image: cimg/php:8.4-node
+  interruptible: true
+  timeout: 10 minutes
+  cache:
+    - *composer_cache
+    - <<: *npm_cache
+  before_script:
+    - composer install --no-interaction --prefer-dist --no-progress
+    - npm ci --no-audit --no-fund
+  script:
+    - npm run lint
+    - npm run typecheck
+  rules: *test_rules
+
+php_lint:
+  stage: test
+  image: cimg/php:8.4-node
+  interruptible: true
+  timeout: 10 minutes
+  allow_failure: true
+  cache:
+    - *composer_cache
+  before_script:
+    - composer install --no-interaction --prefer-dist --no-progress
+  script:
+    - vendor/bin/pint --test --format agent
+  rules: *test_rules
+
+php_test:
+  stage: test
+  # cimg/php bundles PHP 8.4 + Composer + Node 22 as root, which the test job
+  # needs: composer install pulls the visual-editor vendor package, `npm ci`
+  # triggers its postinstall build (see #87), and `npm run build:ssr` produces
+  # the Vite manifest that the Blade views under test resolve via @vite()
+  # AND the bootstrap/ssr/ssr.js bundle that InertiaSsrTest asserts on.
+  image: cimg/php:8.4-node
+  interruptible: true
+  timeout: 25 minutes
+  # HARD GATE: Pest functional regressions must block the MR. Per #24, this is
+  # the whole point of splitting Pint and Pest into separate jobs.
+  cache:
+    - *composer_cache
+    - <<: *npm_cache
+  before_script:
+    - composer install --no-interaction --prefer-dist --no-progress
+    - npm ci --no-audit --no-fund
+    - npm run build:ssr
+  script:
+    - php artisan test --testsuite=Unit,Feature --compact
+  rules: *test_rules
+
+# Pest 4 Browser smoke tests (#35). Runs the admin shell against a real
+# Chromium via Playwright. Split from `php_test` so its extra system-deps +
+# binary download don't slow the unit/feature gate, and so a browser-flake
+# never blocks a fix landing for the functional tests.
+browser_test:
+  stage: test
+  image: cimg/php:8.4-node
+  interruptible: true
+  timeout: 25 minutes
+  cache:
+    - *composer_cache
+    - <<: *npm_cache
+    # Cache Playwright's per-version browser downloads — chromium alone is
+    # ~150MB, so re-downloading on every pipeline doubles the job runtime.
+    - key:
+        files:
+          - package-lock.json
+      paths:
+        - .cache/ms-playwright/
+  variables:
+    PLAYWRIGHT_BROWSERS_PATH: "$CI_PROJECT_DIR/.cache/ms-playwright"
+  before_script:
+    - composer install --no-interaction --prefer-dist --no-progress
+    - npm ci --no-audit --no-fund
+    - npm run build:ssr
+    # `--with-deps` shells out to apt-get for the chromium system libs
+    # (libnss3, libatk1.0, libxkbcommon, fonts, etc.). The cimg base image
+    # ships passwordless sudo for the `circleci` user, which playwright's
+    # installer uses transparently.
+    - npx playwright install --with-deps chromium
+  script:
+    - php artisan test --testsuite=Browser --compact
+  rules: *test_rules
+
+build_release:
+  stage: build_release
+  image: cimg/php:8.4-node
+  timeout: 20 minutes
+  cache:
+    - *composer_cache
+    - <<: *npm_cache
+  variables:
+    APP_ENV: production
+  script:
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - composer install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader
+    - npm ci --no-audit --no-fund
+    - npm run build:ssr
+    # The release artifact MUST be a ZIP — cms-framework's
+    # `ApplicationUpdateManager::extractUpdate()` uses `ZipArchive` and
+    # has no tarball support. The `zip` binary is not in the cimg/php
+    # base image by default, so we install it first. `-x` excludes use
+    # a glob syntax that's different from tar's anchored paths — we
+    # match top-level and nested occurrences for the common cache /
+    # build dirs.
+    - sudo apt-get update -qq && sudo apt-get install -y zip
+    - |
+      zip -r -q "keystone-${VERSION}.zip" . \
+        -x 'node_modules/*' '*/node_modules/*' \
+           'tests/*' '*/tests/*' \
+           '.git/*' '*/.git/*' \
+           '.gitlab/*' '*/.gitlab/*' \
+           '.github/*' '*/.github/*' \
+           '.claude/*' '*/.claude/*' \
+           'plans/*' '*/plans/*' \
+           '.env' '.env.*' \
+           'database/database.sqlite' \
+           'storage/logs/*' \
+           'storage/framework/cache/data/*' \
+           'storage/framework/sessions/*' \
+           'storage/framework/views/*' \
+           '.composer-cache/*' '*/.composer-cache/*' \
+           '.npm/*' '*/.npm/*' \
+           '.idea/*' '.vscode/*' \
+           '*/.DS_Store' '.DS_Store' \
+           "keystone-${VERSION}.zip" "keystone-${VERSION}.zip.sha256"
+    - sha256sum "keystone-${VERSION}.zip" | awk '{print $1}' > "keystone-${VERSION}.zip.sha256"
+    - echo "BUILD_JOB_ID=$CI_JOB_ID" >> build.env
+    - echo "VERSION=$VERSION" >> build.env
+  artifacts:
+    name: "keystone-${CI_COMMIT_TAG}"
+    paths:
+      - keystone-*.zip
+      - keystone-*.zip.sha256
+    expire_in: never
+    reports:
+      dotenv: build.env
+  rules: *release_rules
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: build_release
+      artifacts: true
+  script:
+    - |
+      release-cli create \
+        --name "Keystone ${CI_COMMIT_TAG}" \
+        --tag-name "$CI_COMMIT_TAG" \
+        --description "Keystone CMS release ${CI_COMMIT_TAG}. See CHANGELOG.md for details." \
+        --assets-link "{\"name\":\"keystone-${VERSION}.zip\",\"url\":\"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${BUILD_JOB_ID}/artifacts/keystone-${VERSION}.zip\",\"link_type\":\"package\"}" \
+        --assets-link "{\"name\":\"keystone-${VERSION}.zip.sha256\",\"url\":\"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${BUILD_JOB_ID}/artifacts/keystone-${VERSION}.zip.sha256\",\"link_type\":\"other\"}"
+  rules: *release_rules

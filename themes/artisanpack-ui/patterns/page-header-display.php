@@ -1,0 +1,21 @@
+<?php
+
+/**
+ * Title: Page Header — Display
+ * Slug: artisanpack-ui/page-header-display
+ * Categories: header, featured
+ * Synced: no
+ * Description: Oversized gradient title on a starfield backdrop.
+ */
+?>
+<!-- wp:artisanpack/group {"tagName":"section","layout":{"type":"constrained"},"className":"ap-starfield","style":{"spacing":{"padding":{"top":"var:preset|spacing|70","bottom":"var:preset|spacing|70"}}}} -->
+<section class="wp-block-artisanpack-group wp-block-group ap-starfield" style="padding-top:var(--wp--preset--spacing--70);padding-bottom:var(--wp--preset--spacing--70)">
+<!-- wp:artisanpack/heading {"level":1,"textAlign":"center","className":" ap-gradient-text","style":{"typography":{"fontFamily":"var:preset|font-family|display","fontWeight":"600","letterSpacing":"-0.02em","lineHeight":"1.15"}}} -->
+<h1 class="wp-block-heading has-text-align-center ap-gradient-text" style="font-family:var(--wp--preset--font-family--display);font-weight:600;letter-spacing:-0.02em;line-height:1.15">Display title</h1>
+<!-- /wp:artisanpack/heading -->
+
+<!-- wp:artisanpack/paragraph {"textColor":"text-muted","align":"center","style":{"typography":{"lineHeight":"1.65"}}} -->
+<p class="has-text-muted-color has-text-color has-text-align-center" style="line-height:1.65">Oversized gradient headline on a starfield.</p>
+<!-- /wp:artisanpack/paragraph -->
+</section>
+<!-- /wp:artisanpack/group -->

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
@@ -41,7 +43,7 @@ class OptionalPackagesCommand extends Command
                 'artisanpack-ui/icons',
                 'artisanpack-ui/hooks',
                 'artisanpack-ui/media-library',
-            ]
+            ],
         );
 
         if (! empty($packages)) {
@@ -53,7 +55,7 @@ class OptionalPackagesCommand extends Command
 
         $useModularStructure = confirm(
             __('Would you like to use a modular Laravel structure?'),
-            default: false
+            default: false,
         );
 
         if ($useModularStructure) {
@@ -98,7 +100,7 @@ class OptionalPackagesCommand extends Command
         $projectName = trim($projectName, '-');
 
         // Update the name field (format: vendor/project-name)
-        $vendor = 'laravel';
+        $vendor               = 'laravel';
         $composerJson['name'] = "{$vendor}/{$projectName}";
 
         // Update the description to be generic

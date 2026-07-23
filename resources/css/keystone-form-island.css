@@ -1,0 +1,145 @@
+@import 'tailwindcss';
+
+/*
+ * Scoped Tailwind + daisyUI build for the public-facing form island
+ * (`resources/js/keystone-form-island.tsx`). The admin's `app.css`
+ * is never loaded on theme-rendered pages, so without this entry the
+ * `<x-keystone-form>` mount-point and the visual-editor `artisanpack/form`
+ * block render with daisyUI class names that resolve to nothing.
+ *
+ * Sources are deliberately narrow: only the form-island JS and the
+ * code paths it pulls in get scanned. That keeps the emitted CSS
+ * small (no admin Inertia pages, no Filament-style chrome) so themes
+ * can safely override anything they need to without fighting a
+ * heavyweight stylesheet.
+ *
+ * Load order is enforced by the theme: this entry is `@vite()`'d in
+ * `<head>` BEFORE the theme's own `style.css`, so theme rules win on
+ * equal specificity — that's the contract this stylesheet expects.
+ */
+@source '../js/keystone-form-island.tsx';
+@source '../js/vendor/artisanpack-forms/react';
+@source '../../node_modules/@artisanpack-ui/react/dist';
+
+@plugin 'daisyui' {
+    themes: keystone-light --default;
+}
+
+@plugin 'daisyui/theme' {
+    name: 'keystone-light';
+    default: true;
+    color-scheme: light;
+    --color-base-100: #ffffff;
+    --color-base-200: #f1f5f9;
+    --color-base-300: #cbd5e1;
+    --color-base-content: #0f172a;
+    --color-primary: #0855b1;
+    --color-primary-content: #ffffff;
+    --color-secondary: #010e54;
+    --color-secondary-content: #ffffff;
+    --color-accent: #04d9ff;
+    --color-accent-content: #00022b;
+    --color-neutral: #1e293b;
+    --color-neutral-content: #f8fafc;
+    --color-info: #0ea5e9;
+    --color-info-content: #ffffff;
+    --color-success: #16a34a;
+    --color-success-content: #ffffff;
+    --color-warning: #f59e0b;
+    --color-warning-content: #1f2937;
+    --color-error: #dc2626;
+    --color-error-content: #ffffff;
+    --radius-selector: 0.75rem;
+    --radius-field: 0.5rem;
+    --radius-box: 0.875rem;
+}
+
+/*
+ * Block-supports bridge for `artisanpack/form`.
+ *
+ * `BlockSupports::wrapperAttrs()` already compiles typography / color /
+ * border / spacing attrs into `class` + inline `style` on
+ * `.wp-block-artisanpack-form`. The wrapper picks them up directly —
+ * but daisyUI's `.input`, `.textarea`, `.btn`, and `.label` components
+ * reference their own variables / hardcoded properties (font-family,
+ * font-size, border-color, background), so without explicit propagation
+ * the wrapper-level values stop at the form container.
+ *
+ * The rules below forward the wrapper's resolved typography + color to
+ * the form control surface so site-editor / theme.json changes paint
+ * to the inputs and button instead of just the outer card. The theme's
+ * own `style.css` still loads after this stylesheet (enforced by the
+ * theme contract in `themes/.../index.blade.php`), so any rule below
+ * can be overridden by the theme without specificity gymnastics.
+ */
+.wp-block-artisanpack-form {
+    /*
+     * Typography cascades naturally — but daisyUI's `.input` and
+     * `.btn` declare `font-size`/`font-family` explicitly. `inherit`
+     * lets the wrapper's `style.typography.*` flow into the fields.
+     */
+    font-family: inherit;
+    line-height: inherit;
+}
+
+.wp-block-artisanpack-form .label,
+.wp-block-artisanpack-form .label-text {
+    color: inherit;
+    font-family: inherit;
+    line-height: inherit;
+}
+
+.wp-block-artisanpack-form .input,
+.wp-block-artisanpack-form .textarea,
+.wp-block-artisanpack-form .select,
+.wp-block-artisanpack-form .btn {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+/*
+ * Inline `border-color` on the wrapper (set when the site editor's
+ * Border panel picks a custom color) cascades to the fields via
+ * `currentColor`-style inheritance. daisyUI's `.input`/`.textarea`
+ * hardcode `border-color: var(--color-base-300)`, so the `inherit`
+ * override below makes the wrapper value win the cascade for any
+ * wrapper that actually declares a border-color (the selector matches
+ * inline `style="…border-color: …"` AND the `has-*-border-color`
+ * preset class compiled from `attributes.borderColor`).
+ */
+.wp-block-artisanpack-form[style*='border-color'] .input,
+.wp-block-artisanpack-form[style*='border-color'] .textarea,
+.wp-block-artisanpack-form[style*='border-color'] .select,
+.wp-block-artisanpack-form[class*='-border-color'] .input,
+.wp-block-artisanpack-form[class*='-border-color'] .textarea,
+.wp-block-artisanpack-form[class*='-border-color'] .select {
+    border-color: inherit;
+}
+
+/*
+ * Text color cascade — fields inherit text color so a global-styles
+ * `color.text` setting actually paints input text. Daisy's `.input`
+ * pins `color: var(--color-base-content)` which would otherwise win.
+ */
+.wp-block-artisanpack-form.has-text-color .input,
+.wp-block-artisanpack-form.has-text-color .textarea,
+.wp-block-artisanpack-form.has-text-color .select {
+    color: inherit;
+}
+
+/*
+ * daisyUI v5 wraps the actual `<input>`/`<select>` in a `.input` /
+ * `.select` container and styles the wrapper as the "field" surface.
+ * The browser's native focus ring still draws on the inner element,
+ * which lands *inside* the wrapper border — two concentric outlines
+ * with different colors and metrics. Suppress the inner ring; the
+ * wrapper handles focus state via `:focus-within`.
+ */
+.wp-block-artisanpack-form .input :where(input, select):focus,
+.wp-block-artisanpack-form .input :where(input, select):focus-visible,
+.wp-block-artisanpack-form .select :where(select):focus,
+.wp-block-artisanpack-form .select :where(select):focus-visible {
+    outline: none;
+    box-shadow: none;
+}
