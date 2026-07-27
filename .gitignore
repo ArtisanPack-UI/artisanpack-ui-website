@@ -61,6 +61,7 @@
 /storage/framework/test-plugins-*
 /storage/logs/*
 !/storage/logs/.gitkeep
+/storage/backups
 
 # Test & tooling caches
 /.phpunit.cache

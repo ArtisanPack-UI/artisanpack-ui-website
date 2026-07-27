@@ -256,16 +256,16 @@
         },
         {
             "name": "artisanpack-ui/cms-framework",
-            "version": "2.5.3",
+            "version": "2.5.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ArtisanPack-UI/cms-framework.git",
-                "reference": "254d06c23324557c66c27ab38bc67114e2d379bd"
+                "reference": "c957fe5bd4200f2aeda9947281dd3b7c6cd39e10"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ArtisanPack-UI/cms-framework/zipball/254d06c23324557c66c27ab38bc67114e2d379bd",
-                "reference": "254d06c23324557c66c27ab38bc67114e2d379bd",
+                "url": "https://api.github.com/repos/ArtisanPack-UI/cms-framework/zipball/c957fe5bd4200f2aeda9947281dd3b7c6cd39e10",
+                "reference": "c957fe5bd4200f2aeda9947281dd3b7c6cd39e10",
                 "shasum": ""
             },
             "require": {
@@ -341,9 +341,9 @@
             "description": "Adds in the back end support for building a CMS with any front end framework.",
             "support": {
                 "issues": "https://github.com/ArtisanPack-UI/cms-framework/issues",
-                "source": "https://github.com/ArtisanPack-UI/cms-framework/tree/v2.5.3"
+                "source": "https://github.com/ArtisanPack-UI/cms-framework/tree/v2.5.4"
             },
-            "time": "2026-07-23T14:55:39+00:00"
+            "time": "2026-07-27T19:14:00+00:00"
         },
         {
             "name": "artisanpack-ui/compliance",
@@ -1620,16 +1620,16 @@
         },
         {
             "name": "artisanpack-ui/visual-editor",
-            "version": "1.5.0",
+            "version": "1.5.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ArtisanPack-UI/visual-editor.git",
-                "reference": "3d0a85718905583775f398f0ae652b391d36904b"
+                "reference": "e535fd9c6fb345d643bbeb2340deff5f03f8d23f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ArtisanPack-UI/visual-editor/zipball/3d0a85718905583775f398f0ae652b391d36904b",
-                "reference": "3d0a85718905583775f398f0ae652b391d36904b",
+                "url": "https://api.github.com/repos/ArtisanPack-UI/visual-editor/zipball/e535fd9c6fb345d643bbeb2340deff5f03f8d23f",
+                "reference": "e535fd9c6fb345d643bbeb2340deff5f03f8d23f",
                 "shasum": ""
             },
             "require": {
@@ -1689,9 +1689,9 @@
             "description": "A Gutenberg-powered visual editor for Laravel — post editor, site editor, and Blade/React/Vue block renderers.",
             "support": {
                 "issues": "https://github.com/ArtisanPack-UI/visual-editor/issues",
-                "source": "https://github.com/ArtisanPack-UI/visual-editor/tree/v1.5.0"
+                "source": "https://github.com/ArtisanPack-UI/visual-editor/tree/v1.5.1"
             },
-            "time": "2026-07-21T21:09:31+00:00"
+            "time": "2026-07-26T22:58:41+00:00"
         },
         {
             "name": "aws/aws-crt-php",

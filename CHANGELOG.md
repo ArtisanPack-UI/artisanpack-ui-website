@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-07-26
+
+### Changed
+
+- Bumped `artisanpack-ui/cms-framework` from `2.5.3` to `2.5.4`.
+- Bumped `artisanpack-ui/visual-editor` from `1.5.0` to `1.5.1`.
+
 ## [0.2.3] - 2026-07-22
 
 ### Fixed
