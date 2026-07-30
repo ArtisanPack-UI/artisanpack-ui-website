@@ -37,6 +37,7 @@
 # contents, so each subdirectory is free to be its own repo.
 /plugins/*
 !/plugins/.gitkeep
+!/plugins/artisanpack-ui
 
 # Installer flag — written by `keystone:install` to lock /install and signal
 # the `installed` middleware. Per-environment runtime state, never committed.
