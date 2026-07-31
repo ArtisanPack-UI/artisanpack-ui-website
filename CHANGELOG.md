@@ -7,12 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-07-27
+
+### Changed
+
+- Bumped `artisanpack-ui/visual-editor` from `1.5.1` to `1.5.3`, picking up
+  the site-editor render fixes that unblocked the 0.2.5 release attempt.
+- Bumped `artisanpack-ui/cms-framework` from `2.5.3` to `2.5.4`. Updater
+  metadata GETs (release feeds, single-release lookups, SHA-256 sidecars,
+  custom JSON) now go through a raw Guzzle client that bypasses Laravel's
+  HTTP factory event dispatch, so listeners like Herd Pro's
+  `HttpClientWatcher`, Telescope, and Debugbar can no longer wedge or
+  corrupt an update check. The download-body invariant added in 2.5.1
+  (#124, cms-framework#214) is now extended to every metadata request.
+- **Updater is now checksum-strict by default.** cms-framework 2.5.4
+  refuses to install any update whose source does not advertise a
+  SHA-256, instead of the previous warn-and-skip. Opt back in on trusted
+  networks with `cms.updates.allow_unverified_updates=true`. Every
+  release built by this project already publishes a `.sha256` sidecar,
+  so no operator action is required for hosted Keystone updates.
+- Picked up transitive updates from `composer update`:
+  `laravel/framework` (13.22.0 → 13.23.0),
+  `aws/aws-sdk-php` (3.389.0 → 3.389.1),
+  and a `dedoc/scramble` dev bump (v0.13.35 → v0.13.36).
+
+### Fixed
+
+- `UpdaterIntegrationTest` now uses `MetadataClient::useHttpFacadeBridge()`
+  in `beforeEach` (with a matching `reset()` in `afterEach`) so
+  `Http::fake()` continues to intercept updater metadata GETs after the
+  cms-framework 2.5.4 raw-Guzzle switch. Also added coverage for the
+  new "no advertised SHA-256, opt-in required" behavior alongside the
+  existing warn-and-skip case.
+
 ## [0.2.4] - 2026-07-26
 
 ### Changed
 
-- Bumped `artisanpack-ui/cms-framework` from `2.5.3` to `2.5.4`.
 - Bumped `artisanpack-ui/visual-editor` from `1.5.0` to `1.5.1`.
+- Picked up transitive updates from `composer update`:
+  `laravel/framework` (13.21.1 → 13.22.0),
+  `aws/aws-sdk-php` (3.388.11 → 3.389.0),
+  `guzzlehttp/guzzle` (7.15.1 → 7.15.2),
+  and dev-only bumps to `amphp/amp` and `amphp/pipeline`.
 
 ## [0.2.3] - 2026-07-22
 
