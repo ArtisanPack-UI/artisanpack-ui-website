@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Card, EmptyState, PageHeader } from '@/components/admin/keystone';
 import {
@@ -61,7 +62,12 @@ const INITIAL_CREATE: CreateForm = {
     hierarchical: false,
     has_archive: true,
     archive_slug: '',
-    supports: ['title', 'content'],
+    // `editor`, not `content`: the framework's `SupportsFeature` enum —
+    // which is what `supports.*` validates against — renamed the block-
+    // content flag to `editor`. Leaving `content` here meant the create
+    // form's *default* payload failed validation, so a user who didn't
+    // touch the feature checkboxes could not create a content type at all.
+    supports: ['title', 'editor'],
 };
 
 export default function ContentTypes() {
@@ -154,6 +160,19 @@ export default function ContentTypes() {
                             <BoolField label="Show in admin" value={form.data.show_in_admin} onChange={(v) => form.setData('show_in_admin', v)} />
                             <BoolField label="Hierarchical" value={form.data.hierarchical} onChange={(v) => form.setData('hierarchical', v)} />
                             <BoolField label="Has archive" value={form.data.has_archive} onChange={(v) => form.setData('has_archive', v)} />
+                            {applyFilters<ReactNode>(
+                                // Slot rendered inside the create form so a
+                                // plugin can inject additional field groups
+                                // (e.g. custom endpoint slugs, workflow
+                                // toggles) without forking this page. The
+                                // starting value is `null`; wrap the return
+                                // in `<div className="md:col-span-2">` if
+                                // you want a full-width section. Args:
+                                // `(ReactNode, { form, mode: 'create' })`.
+                                'keystone.admin.contentTypes.form.sections',
+                                null,
+                                { form, mode: 'create' },
+                            )}
                             <div className="md:col-span-2 flex items-center gap-2">
                                 <button type="submit" disabled={form.processing} className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:opacity-50">
                                     {form.processing ? 'Creating…' : 'Create content type'}
@@ -187,24 +206,34 @@ export default function ContentTypes() {
                                     {row.supports.length > 0 ? row.supports.join(', ') : 'no features'}
                                 </div>
                                 <div className="mt-auto flex flex-wrap items-center gap-2">
-                                    {row.is_editable ? (
-                                        <>
-                                            <Link
-                                                href={contentTypeEdit(row.slug).url}
-                                                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200"
-                                            >
-                                                Edit
-                                            </Link>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleDelete(row)}
-                                                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200"
-                                            >
-                                                Delete
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <span className="text-xs text-base-content/50">Registered in code</span>
+                                    {applyFilters<ReactNode>(
+                                        // Route the trailing action row through
+                                        // `.contentTypes.actions` so a plugin can
+                                        // add "Duplicate", "Export JSON", or
+                                        // gate the built-in Edit / Delete
+                                        // behind a permission check. Args:
+                                        // `(ReactNode, { contentType })`.
+                                        'keystone.admin.contentTypes.actions',
+                                        row.is_editable ? (
+                                            <>
+                                                <Link
+                                                    href={contentTypeEdit(row.slug).url}
+                                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200"
+                                                >
+                                                    Edit
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDelete(row)}
+                                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <span className="text-xs text-base-content/50">Registered in code</span>
+                                        ),
+                                        { contentType: row },
                                     )}
                                 </div>
                             </Card>

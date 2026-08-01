@@ -1,4 +1,5 @@
 import { lazy, type ComponentType } from 'react';
+import { applyFilters, doAction } from '@artisanpack-ui/hooks-js';
 import { loadFederatedPage, type FederatedModuleEntry } from './federated-loader';
 
 /**
@@ -30,6 +31,20 @@ const cache = new Map<string, ComponentType<Record<string, unknown>>>();
  * both surfaces on a single cache — a plugin that rebuilds its remote
  * URL invalidates one cache, not two, and page + panel bundles from
  * the same remote never fight each other's eviction path.
+ *
+ * Plugin extension seams (#152):
+ * - `keystone.admin.plugins.federatedPage.beforeMount` action fires
+ *   inside the lazy factory the moment the bundle resolves, before
+ *   React commits the component to the tree. Useful for lazy-loading
+ *   companion assets (a plugin-owned stylesheet, a translations file).
+ * - `keystone.admin.plugins.federatedPage.loadError` filter runs when
+ *   `loadFederatedPage()` rejects; subscribers can transform the error
+ *   (e.g. wrap in a plugin-branded exception) or short-circuit by
+ *   returning a synthetic module. Fallthrough (returning the original
+ *   error) keeps the standard rethrow-into-nearest-error-boundary path.
+ * - `keystone.admin.plugins.federatedPage.wrap` filter wraps the
+ *   resolved component so a subscriber can inject an HOC (feature-flag
+ *   gate, tracking wrapper, layout override) around a plugin page.
  */
 export function resolveFederatedComponent(
     entry: FederatedModuleEntry,
@@ -44,10 +59,36 @@ export function resolveFederatedComponent(
     }
 
     const Component = lazy(async () => {
-        const loaded = await loadFederatedPage(entry);
-        return {
-            default: loaded.default as unknown as ComponentType<Record<string, unknown>>,
-        };
+        let loaded;
+        try {
+            loaded = await loadFederatedPage(entry);
+        } catch (error) {
+            const failure = error instanceof Error ? error : new Error(String(error));
+            // Filter subscribers can return either a `default: Component`
+            // to short-circuit into a synthetic module or `null` /
+            // `undefined` to preserve the throw-into-boundary path.
+            const outcome = applyFilters<
+                { default: ComponentType<Record<string, unknown>> } | null
+            >('keystone.admin.plugins.federatedPage.loadError', null, {
+                error: failure,
+                entry,
+            });
+            if (outcome && typeof outcome === 'object' && 'default' in outcome) {
+                return outcome;
+            }
+            throw failure;
+        }
+
+        doAction('keystone.admin.plugins.federatedPage.beforeMount', entry, loaded);
+
+        const Inner = loaded.default as unknown as ComponentType<Record<string, unknown>>;
+        const Wrapped = applyFilters<ComponentType<Record<string, unknown>>>(
+            'keystone.admin.plugins.federatedPage.wrap',
+            Inner,
+            { entry },
+        );
+
+        return { default: Wrapped };
     });
 
     cache.set(key, Component);

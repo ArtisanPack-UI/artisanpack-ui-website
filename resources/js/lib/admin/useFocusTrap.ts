@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { doAction } from '@artisanpack-ui/hooks-js';
 
 const FOCUSABLE_SELECTOR = [
     'a[href]',
@@ -37,6 +38,27 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
         const first = focusables[0] ?? container;
         first.focus();
 
+        // Fire `keystone.admin.focusTrap.mounted` so a plugin can react
+        // to the trap taking effect (analytics on modal open, custom
+        // focus placement, an aria-live announcement). Args:
+        // `(HTMLElement, { previouslyFocused, focusableCount })`.
+        // Only fires on activation — no `.unmounted` twin because the
+        // useEffect's cleanup fires deterministically on deactivation
+        // and subscribers can pair the two via the mounted-side ref.
+        doAction('keystone.admin.focusTrap.mounted', container, {
+            previouslyFocused,
+            focusableCount: focusables.length,
+        });
+
+        // Every Keystone modal uses `useFocusTrap` today, so use it as
+        // the canonical hook for `.modal.opened` / `.modal.closed` as
+        // well. Subscribers get the same container reference on both
+        // sides so a `WeakMap<HTMLElement, Session>` in the plugin
+        // pairs open/close deterministically. A future drawer or
+        // popover that opts out of `useFocusTrap` will need to fire
+        // these itself. Args: `(HTMLElement)`.
+        doAction('keystone.admin.modal.opened', container);
+
         function handleKeyDown(event: KeyboardEvent) {
             if (event.key !== 'Tab') {
                 return;
@@ -64,6 +86,7 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean) {
         return () => {
             container.removeEventListener('keydown', handleKeyDown);
             previouslyFocused?.focus?.();
+            doAction('keystone.admin.modal.closed', container);
         };
     }, [active]);
 

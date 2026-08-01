@@ -56,6 +56,8 @@ class TaxonomyController extends Controller
                 ->withErrors(['slug' => __('Failed to create taxonomy.')]);
         }
 
+        doAction('keystone.admin.contentTypes.taxonomy.created', $taxonomy);
+
         return redirect()
             ->route('admin.content-model.taxonomies.index')
             ->with('success', __('Taxonomy ":name" created.', ['name' => $taxonomy->name]));
@@ -95,6 +97,8 @@ class TaxonomyController extends Controller
                 ->withInput()
                 ->withErrors(['slug' => __('Failed to update taxonomy.')]);
         }
+
+        doAction('keystone.admin.contentTypes.taxonomy.updated', $updated);
 
         return redirect()
             ->route('admin.content-model.taxonomies.index')
@@ -141,6 +145,8 @@ class TaxonomyController extends Controller
 
         abort_if(null === $term, 409, 'Could not allocate a unique term slug.');
 
+        doAction('keystone.admin.contentTypes.term.created', $term);
+
         return response()->json(['id' => (int) $term->id, 'name' => $term->name]);
     }
 
@@ -151,6 +157,14 @@ class TaxonomyController extends Controller
         if (null === $model) {
             return back()->withErrors(['slug' => __('Taxonomy ":slug" cannot be removed.', ['slug' => $taxonomy])]);
         }
+
+        // Snapshot the terms about to be cascade-deleted so subscribers
+        // still get the full term payload after the transaction commits.
+        // Fetching inside the transaction and firing pre-cascade would
+        // let a subscriber exception roll the whole delete back — and a
+        // rollback would leave prior subscribers with phantom
+        // "term.deleted" events for terms that still exist.
+        $terms = DynamicContentTerm::query()->where('taxonomy_slug', $taxonomy)->get();
 
         try {
             DB::transaction(function () use ($taxonomy): void {
@@ -169,6 +183,13 @@ class TaxonomyController extends Controller
             report($e);
 
             return back()->withErrors(['slug' => __('Failed to delete taxonomy.')]);
+        }
+
+        // Post-commit fires: taxonomy first, then one `.term.deleted`
+        // per cascaded term.
+        doAction('keystone.admin.contentTypes.taxonomy.deleted', $model);
+        foreach ($terms as $term) {
+            doAction('keystone.admin.contentTypes.term.deleted', $term);
         }
 
         return redirect()

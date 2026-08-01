@@ -65,6 +65,18 @@ function keystoneFederationPlugin() {
                 version:         '1.0.0',
                 requiredVersion: '^1.0.0',
             },
+            // The hooks primitive MUST be a singleton across the host and every
+            // federated plugin bundle — otherwise each copy owns its own action/
+            // filter registry, and a plugin that calls `addFilter(...)` on its
+            // own copy never influences the host's `applyFilters(...)`. Version
+            // is pinned to the exact release the host runs; `strictVersion` is
+            // left at the plugin default (`false`) so a plugin compiled against
+            // a compatible minor still resolves without a load-time bail.
+            '@artisanpack-ui/hooks-js': {
+                singleton:       true,
+                version:         '1.0.0',
+                requiredVersion: '^1.0.0',
+            },
         },
     });
 }

@@ -40,8 +40,11 @@ class WelcomeWidget implements KeystoneAdminWidgetInterface
             'site_name'    => self::resolveSiteName(),
             'display_name' => (string) ($user->display_name ?? ''),
             'actions'      => [
-                ['key' => 'create-page',    'label' => 'Create page',    'url' => route('admin.pages.create')],
-                ['key' => 'write-post',     'label' => 'Write post',     'url' => route('admin.posts.create')],
+                // #184 — Add-New landing points at Index (`?new=1` opens
+                // the Add-New modal on load) instead of the killed
+                // auto-draft `create` route.
+                ['key' => 'create-page',    'label' => 'Create page',    'url' => route('admin.pages.index', ['new' => 1])],
+                ['key' => 'write-post',     'label' => 'Write post',     'url' => route('admin.posts.index', ['new' => 1])],
                 ['key' => 'upload-media',   'label' => 'Upload media',   'url' => route('admin.media.index')],
                 ['key' => 'customize-site', 'label' => 'Customize site', 'url' => route('admin.site-design')],
             ],

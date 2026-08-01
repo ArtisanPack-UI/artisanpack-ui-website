@@ -27,7 +27,7 @@ createServer((page) => {
     };
     const sharedName = props.name;
     const appName    = sharedName || fallbackAppName;
-    const federated  = props.keystone?.federatedModules ?? {};
+    const federated  = props.keystone?.federatedModules?.pages ?? {};
 
     return createInertiaApp({
         page,

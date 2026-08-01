@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Exceptions\ThemeInstallException;
+use App\Support\Hooks;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
 use Illuminate\Http\UploadedFile;
@@ -77,6 +78,12 @@ class ThemeInstaller
 
             $this->forgetDiscoveryCache();
 
+            // Emit at the service layer (not the controller) so any CLI
+            // installer or programmatic caller fires the hook too.
+            // Wrapped: the theme is already on disk, so a subscriber
+            // exception must not surface as an install failure.
+            Hooks::safeDoAction('keystone.admin.themes.installed', $slug, $manifest);
+
             return ['slug' => $slug, 'manifest' => $manifest];
         } finally {
             if (File::isDirectory($stagingPath)) {
@@ -102,6 +109,12 @@ class ThemeInstaller
             throw new ThemeInstallException(__('You cannot remove the currently active theme.'));
         }
 
+        // Capture the target theme's manifest BEFORE removing its
+        // directory so the `uninstalled` hook can hand subscribers the
+        // same shape the `installed` hook received. `getTheme()` reads
+        // from the discovery cache, which is still warm at this point.
+        $manifest = $this->themeManager->getTheme($slug);
+
         $path = $this->themesBasePath().'/'.$slug;
 
         if (File::isDirectory($path)) {
@@ -109,6 +122,12 @@ class ThemeInstaller
         }
 
         $this->forgetDiscoveryCache();
+
+        // Service-layer emit so CLI / programmatic uninstalls fire too.
+        // Payload mirrors `installed`: `(string $slug, ?array $manifest)`.
+        // Wrapped: the theme directory is already gone, so a subscriber
+        // exception must not surface as an uninstall failure.
+        Hooks::safeDoAction('keystone.admin.themes.uninstalled', $slug, $manifest);
     }
 
     private function extractToTemp(UploadedFile $upload): string
@@ -252,5 +271,10 @@ class ThemeInstaller
     {
         $key = (string) config('cms.themes.cacheKey', 'cms.themes.discovered');
         Cache::forget($key);
+
+        // Wrapped: this fires after the install / uninstall committed
+        // to disk, so a subscriber throw must not turn the operation
+        // into an admin-visible 500.
+        Hooks::safeDoAction('keystone.cache.forgotten', $key);
     }
 }

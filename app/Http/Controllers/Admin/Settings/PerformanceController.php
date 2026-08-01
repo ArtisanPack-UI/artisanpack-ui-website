@@ -113,6 +113,8 @@ class PerformanceController extends Controller
             'image_driver'        => ['nullable', 'in:gd,imagick'],
         ]);
 
+        $diff = [];
+
         foreach (self::FIELDS as $key => $meta) {
             if (! array_key_exists($key, $validated)) {
                 continue;
@@ -132,6 +134,12 @@ class PerformanceController extends Controller
                 default => null === $raw || '' === $raw ? null : $raw,
             };
 
+            $previous = config($meta['config']);
+
+            if ($previous !== $cfgValue) {
+                $diff[$key] = ['from' => $previous, 'to' => $cfgValue];
+            }
+
             config()->set($meta['config'], $cfgValue);
         }
 
@@ -147,6 +155,9 @@ class PerformanceController extends Controller
         if (App::configurationIsCached()) {
             DeferredConfigCacheRebuild::schedule();
         }
+
+        doAction('keystone.admin.settings.performance.saved', ['panel' => 'performance', 'diff' => $diff]);
+        doAction('keystone.admin.settings.saved', ['panel' => 'performance', 'diff' => $diff]);
 
         return back()->with('success', 'Performance settings saved.');
     }

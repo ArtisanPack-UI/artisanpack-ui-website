@@ -1,4 +1,5 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, isValidElement, type ErrorInfo, type ReactNode } from 'react';
+import { applyFilters, doAction } from '@artisanpack-ui/hooks-js';
 
 /**
  * Isolates plugin-supplied React pages loaded over Module Federation from
@@ -47,6 +48,18 @@ export class PluginErrorBoundary extends Component<Props, State> {
             error,
             info,
         );
+        // Broadcast to `keystone.admin.error.boundary` so error-tracking
+        // plugins (Sentry, Bugsnag, etc.) can pick up the failure without
+        // needing to monkey-patch the boundary class. Scope is `plugin` so
+        // consumers can distinguish federated-page failures from panel or
+        // shell failures.
+        doAction('keystone.admin.error.boundary', {
+            scope:      'plugin',
+            error,
+            info,
+            pluginName: this.props.pluginName,
+            pageName:   this.props.pageName,
+        });
     }
 
     render(): ReactNode {
@@ -55,7 +68,7 @@ export class PluginErrorBoundary extends Component<Props, State> {
             return this.props.children;
         }
 
-        return (
+        const fallback: ReactNode = (
             <div
                 role="alert"
                 className="mx-auto my-8 max-w-2xl rounded-lg border border-error/40 bg-error/5 p-6 text-sm"
@@ -70,5 +83,48 @@ export class PluginErrorBoundary extends Component<Props, State> {
                 <p className="mt-3 font-mono text-xs text-base-content/60">{error.message}</p>
             </div>
         );
+
+        // #152 — plugins can substitute the fallback UI (e.g. render a
+        // themed error state matching the plugin's chrome, or attach a
+        // "report to plugin author" button). Args: `(ReactNode, { error,
+        // pluginName, pageName })`; return `null` to render nothing.
+        //
+        // Guarded: a throw from the filter subscriber here would escape
+        // the boundary's own render() path, and React does NOT catch
+        // errors thrown by an error boundary's fallback UI — the throw
+        // would bubble to the closest ancestor boundary or crash the
+        // admin shell. Fall back to the built-in UI on subscriber
+        // failure so the isolation guarantee stands.
+        try {
+            const filtered = applyFilters<ReactNode>(
+                'keystone.admin.plugins.errorBoundary.render',
+                fallback,
+                {
+                    error,
+                    pluginName: this.props.pluginName,
+                    pageName:   this.props.pageName,
+                },
+            );
+            // A subscriber returning a plain object / Promise / other
+            // non-renderable would throw during React's commit of the
+            // BOUNDARY'S OWN fallback — which React does not catch —
+            // and would either bubble to an ancestor boundary or crash
+            // the shell. Only forward renderable values; anything else
+            // falls back to the built-in UI.
+            const renderable =
+                null == filtered
+                || 'string' === typeof filtered
+                || 'number' === typeof filtered
+                || 'boolean' === typeof filtered
+                || isValidElement(filtered);
+
+            return renderable ? filtered : fallback;
+        } catch (filterError) {
+            console.error(
+                `[keystone] subscriber of keystone.admin.plugins.errorBoundary.render threw:`,
+                filterError,
+            );
+            return fallback;
+        }
     }
 }

@@ -253,6 +253,12 @@ export interface KeystoneSharedProps {
         };
         site: SiteInfo;
         brand: SiteBrand;
+        /**
+         * Currently-installed Keystone version (`config('app.version')`).
+         * Rendered in the sidebar footer so the admin surface reflects the
+         * real build rather than a hardcoded label.
+         */
+        version: string;
         adminTheme: KeystoneAdminTheme;
         notifications: NotificationItem[];
         features: KeystoneFeatures;
@@ -263,17 +269,22 @@ export interface KeystoneSharedProps {
         privacy: { api_prefix: string };
         performance: { api_prefix: string };
         /**
-         * Federated plugin pages available to this viewer, keyed by the
-         * Inertia page name the controller renders (e.g.
-         * `plugins/hello-world/dashboard`). Empty when the viewer is not
-         * an admin or when no active plugin exposes a federated module.
-         * See `resources/js/lib/plugins/federated-loader.ts` for the
-         * runtime that consumes each entry.
+         * Federated plugin pages available to this viewer, plus optional
+         * side-effect boot modules the shell preloads before the first
+         * page mounts so plugin-registered actions/filters bind in time
+         * for the admin chrome. `pages` is keyed by the Inertia page name
+         * the controller renders (e.g. `plugins/hello-world/dashboard`).
+         * Both are empty when the viewer is not an admin or when no active
+         * plugin exposes a federated module. See
+         * `resources/js/lib/plugins/federated-loader.ts` for the runtime.
          */
-        federatedModules: Record<
-            string,
-            { remote: string; entry: string; module: string }
-        >;
+        federatedModules: {
+            pages: Record<
+                string,
+                { remote: string; entry: string; module: string }
+            >;
+            bootModules: Array<{ remote: string; entry: string; module: string }>;
+        };
     };
 }
 
@@ -295,11 +306,21 @@ export interface KeystoneUpdateAvailable {
  * Colors are validated hex strings or null (null keeps the built-in daisyUI
  * theme default). `forceTheme` pins the admin scheme; `system` respects the
  * per-user/browser preference.
+ *
+ * Each brand colour ships as two variants: the base key (`primaryColor`,
+ * `secondaryColor`, `accentColor`) is clamped for the LIGHT theme's base
+ * surface, and the matching `*Dark` key is clamped for the DARK theme's base
+ * surface. `AdminTheme::palette()` and the mirror in `useAdminPalette` apply
+ * the same WCAG contrast floor so a user-picked colour that reads fine in
+ * one scheme but not the other still stays readable in both.
  */
 export interface KeystoneAdminTheme {
     primaryColor: string | null;
+    primaryColorDark: string | null;
     secondaryColor: string | null;
+    secondaryColorDark: string | null;
     accentColor: string | null;
+    accentColorDark: string | null;
     forceTheme: 'system' | 'light' | 'dark';
 }
 

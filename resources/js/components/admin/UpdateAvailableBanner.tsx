@@ -1,4 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
+import type { ReactNode } from 'react';
 import admin from '@/routes/admin';
 import type { KeystoneSharedProps } from '@/types/keystone';
 
@@ -8,17 +10,14 @@ import type { KeystoneSharedProps } from '@/types/keystone';
  * Driven entirely by the `keystone.updateAvailable` shared prop set in
  * HandleInertiaRequests; the prop is only populated for admins, so this
  * component is safe to mount on shared admin pages without an extra
- * role check. Renders nothing when there's no update pending.
+ * role check. Renders nothing when there's no update pending — unless a
+ * `keystone.admin.updateBanner` filter subscriber injects its own banner.
  */
 export function UpdateAvailableBanner() {
     const { keystone } = usePage<KeystoneSharedProps & Record<string, unknown>>().props;
     const pending = keystone.updateAvailable;
 
-    if (!pending) {
-        return null;
-    }
-
-    return (
+    const builtIn: ReactNode = pending ? (
         <div
             role="status"
             className="flex flex-col gap-3 rounded-[var(--radius-box)] border border-warning/30 bg-warning/10 p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -51,5 +50,14 @@ export function UpdateAvailableBanner() {
                 </Link>
             </div>
         </div>
-    );
+    ) : null;
+
+    // Plugins can rewrite the banner tree — hide it, swap in a richer
+    // release-notes preview, add a "postpone" button — through
+    // `keystone.admin.updateBanner`. Args: `(ReactNode, pending | null)`;
+    // return the (possibly replaced) node, or `null` to suppress. Runs
+    // even when no update is pending so a plugin can inject a synthetic
+    // banner for its own release channel.
+    const filtered = applyFilters<ReactNode>('keystone.admin.updateBanner', builtIn, pending);
+    return <>{filtered}</>;
 }

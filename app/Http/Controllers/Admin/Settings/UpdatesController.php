@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Services\UpdateNotifier;
+use App\Support\Hooks;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
@@ -72,10 +73,14 @@ class UpdatesController extends Controller
         try {
             $latestInfo = $manager->checkForUpdate();
         } catch (Throwable $e) {
+            Hooks::safeDoAction('keystone.updater.failed', $e->getMessage(), null);
+
             return redirect()
                 ->route('admin.settings.updates')
                 ->with('error', 'Cannot run update: release feed unreachable. '.$e->getMessage());
         }
+
+        Hooks::safeDoAction('keystone.updater.checked', $latestInfo);
 
         $targetVersion = $latestInfo->latestVersion;
         $requested     = $request->string('version')->trim()->value();
@@ -86,24 +91,25 @@ class UpdatesController extends Controller
                 ->with('error', "The requested version ({$requested}) no longer matches the latest available release ({$targetVersion}). Reload and try again.");
         }
 
+        $currentVersion = (string) config('app.version', '0.0.0');
+
+        Hooks::safeDoAction('keystone.updater.starting', $targetVersion, $currentVersion);
+
+        // Only `performUpdate()` participates in the failed-hook branch.
+        // Emitting `.succeeded` and the follow-up notify/cache side
+        // effects sit outside so a subscriber (or notifier) throwing
+        // after a successful update can't turn the request into a
+        // spurious `keystone.updater.failed` for a run that actually
+        // succeeded.
         try {
             $manager->performUpdate();
-
-            $notifier->notifySuccess($targetVersion);
-
-            // Invalidate the cached "update available" flag so the
-            // dashboard banner clears immediately rather than waiting
-            // for the next scheduled tick.
-            Cache::forget('cms.update_available');
-
-            return redirect()
-                ->route('admin.settings.updates')
-                ->with('success', "Keystone updated to {$targetVersion}.");
         } catch (Throwable $e) {
             Log::error('Keystone update failed', [
                 'target_version' => $targetVersion,
                 'exception'      => $e->getMessage(),
             ]);
+
+            Hooks::safeDoAction('keystone.updater.failed', $e->getMessage(), $targetVersion);
 
             $notifier->notifyFailure($targetVersion, $e->getMessage());
 
@@ -111,6 +117,25 @@ class UpdatesController extends Controller
                 ->route('admin.settings.updates')
                 ->with('error', 'Update failed: '.$e->getMessage().' The pre-update snapshot was restored.');
         }
+
+        // Post-success side effects are best-effort — the update itself
+        // already committed, so a broken subscriber or notifier must not
+        // masquerade as an update failure.
+        try {
+            Hooks::safeDoAction('keystone.updater.succeeded', $targetVersion, $currentVersion);
+            $notifier->notifySuccess($targetVersion);
+            // Invalidate the cached "update available" flag so the
+            // dashboard banner clears immediately rather than waiting
+            // for the next scheduled tick.
+            Cache::forget('cms.update_available');
+            Hooks::safeDoAction('keystone.cache.forgotten', 'cms.update_available');
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        return redirect()
+            ->route('admin.settings.updates')
+            ->with('success', "Keystone updated to {$targetVersion}.");
     }
 
     /**
@@ -123,16 +148,28 @@ class UpdatesController extends Controller
     private function fetchLatest(ApplicationUpdateManager $manager): ?UpdateInfo
     {
         try {
-            return $manager->checkForUpdate();
+            $info = $manager->checkForUpdate();
         } catch (UpdateException|Throwable $e) {
             Log::warning('Keystone update check failed', [
                 'exception' => $e->getMessage(),
             ]);
 
+            // Wrapped so a broken subscriber can't escape the "never
+            // 500 from show()" contract this method documents.
+            Hooks::safeDoAction('keystone.updater.failed', $e->getMessage(), null);
+
             request()->attributes->set('keystone.updates.check_error', $e->getMessage());
 
             return null;
         }
+
+        // Dispatched OUTSIDE the try/catch: a throwing subscriber must
+        // not be misclassified as a check-feed failure that trips the
+        // catch's error-string branch. `safeDoAction` also ensures the
+        // subscriber's throw cannot escape and 500 `show()`.
+        Hooks::safeDoAction('keystone.updater.checked', $info);
+
+        return $info;
     }
 
     private function lastCheckError(Request $request): ?string

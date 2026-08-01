@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\BlogController;
 use App\Http\Controllers\CommentSubmissionController;
 use App\Http\Controllers\InstallController;
+use App\Http\Controllers\PreviewController;
 use App\Http\Controllers\PublicFormController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\SitePasswordController;
@@ -76,6 +77,19 @@ Route::middleware(['feature:forms', 'site.access'])
     ->get('forms/{form}', [PublicFormController::class, 'show'])
     ->name('public.forms.show');
 
+// Signed-URL preview endpoint. `signed` middleware verifies the HMAC
+// + expiration timestamp before the controller runs, so an invalid or
+// expired signature returns 403 and never reaches PreviewController.
+// Deliberately NOT behind `site.access` — sharing a preview link with
+// a reviewer who isn't behind the site password is the entire point.
+// `type` is constrained to the surfaces PreviewUrl knows how to sign
+// today (post|page); adding CPT support means widening the pattern.
+Route::get('/preview/{type}/{id}', PreviewController::class)
+    ->where('type', 'post|page')
+    ->where('id', '[0-9]+')
+    ->middleware('signed')
+    ->name('preview.show');
+
 require __DIR__.'/admin.php';
 require __DIR__.'/auth.php';
 
@@ -85,6 +99,6 @@ require __DIR__.'/auth.php';
 // PublicPageController. New top-level admin segments must be added to
 // this list to stay out of the page-resolution path.
 Route::get('/{path}', [PublicPageController::class, 'show'])
-    ->where('path', '^(?!admin($|/)|api($|/)|auth($|/)|blog($|/)|forms($|/)|install($|/)|settings($|/)|site-password($|/)|themes($|/)|visual-editor($|/)|build($|/)|storage($|/)|assets($|/)|favicon\\.ico$|robots\\.txt$|sitemap[\\-a-z0-9]*\\.xml$).+$')
+    ->where('path', '^(?!admin($|/)|api($|/)|auth($|/)|blog($|/)|forms($|/)|install($|/)|preview($|/)|settings($|/)|site-password($|/)|themes($|/)|visual-editor($|/)|build($|/)|storage($|/)|assets($|/)|favicon\\.ico$|robots\\.txt$|sitemap[\\-a-z0-9]*\\.xml$).+$')
     ->middleware('site.access')
     ->name('public.show');

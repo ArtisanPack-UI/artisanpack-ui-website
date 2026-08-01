@@ -67,10 +67,14 @@ class TwoFactorChallengeController extends Controller
         }
 
         if (! TwoFactor::verify($user, $request->string('code')->value())) {
+            doAction('keystone.auth.twoFactorFailed', $user);
+
             throw ValidationException::withMessages([
                 'code' => 'The provided two-factor code is invalid or has expired.',
             ]);
         }
+
+        doAction('keystone.auth.twoFactorVerified', $user);
 
         $request->session()->put(TwoFactorMiddleware::SESSION_KEY, true);
 

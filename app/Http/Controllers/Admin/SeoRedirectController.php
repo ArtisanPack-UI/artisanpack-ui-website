@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\Hooks;
 use ArtisanPackUI\SEO\Models\Redirect;
 use ArtisanPackUI\SEO\Services\RedirectService;
 use Illuminate\Http\RedirectResponse;
@@ -57,7 +58,7 @@ class SeoRedirectController extends Controller
         $this->normalizeFromPathOnRequest($request);
         $validated = $request->validate($this->rules());
 
-        Redirect::create([
+        $created = Redirect::create([
             'from_path'   => $validated['from_path'],
             'to_path'     => $validated['to_path'],
             'status_code' => (int) $validated['status_code'],
@@ -68,6 +69,14 @@ class SeoRedirectController extends Controller
 
         $this->redirectService->clearCache();
 
+        $this->fireSaved([
+            'action' => 'created',
+            'id'     => (int) $created->id,
+            'to'     => $created->only(['from_path', 'to_path', 'status_code', 'match_type', 'is_active', 'notes']),
+        ]);
+
+        Hooks::safeDoAction('keystone.admin.seo.redirect.created', $created);
+
         return redirect()
             ->route('admin.seo.redirects.index')
             ->with('success', 'Redirect created.');
@@ -77,6 +86,8 @@ class SeoRedirectController extends Controller
     {
         $this->normalizeFromPathOnRequest($request);
         $validated = $request->validate($this->rules($redirect));
+
+        $previous = $redirect->only(['from_path', 'to_path', 'status_code', 'match_type', 'is_active', 'notes']);
 
         $redirect->update([
             'from_path'   => $validated['from_path'],
@@ -92,6 +103,15 @@ class SeoRedirectController extends Controller
 
         $this->redirectService->clearCache();
 
+        $this->fireSaved([
+            'action' => 'updated',
+            'id'     => (int) $redirect->id,
+            'from'   => $previous,
+            'to'     => $redirect->only(['from_path', 'to_path', 'status_code', 'match_type', 'is_active', 'notes']),
+        ]);
+
+        Hooks::safeDoAction('keystone.admin.seo.redirect.updated', $redirect, $previous);
+
         return redirect()
             ->route('admin.seo.redirects.index')
             ->with('success', 'Redirect updated.');
@@ -99,12 +119,43 @@ class SeoRedirectController extends Controller
 
     public function destroy(Redirect $redirect): RedirectResponse
     {
+        $snapshot = $redirect->only(['from_path', 'to_path', 'status_code', 'match_type', 'is_active', 'notes']);
+        $id       = (int) $redirect->id;
+
         $redirect->delete();
         $this->redirectService->clearCache();
+
+        $this->fireSaved([
+            'action' => 'deleted',
+            'id'     => $id,
+            'from'   => $snapshot,
+        ]);
+
+        Hooks::safeDoAction('keystone.admin.seo.redirect.deleted', $id, $snapshot);
 
         return redirect()
             ->route('admin.seo.redirects.index')
             ->with('success', 'Redirect deleted.');
+    }
+
+    /**
+     * SEO redirects are a small table where every mutation is essentially
+     * a "settings save" from a subscriber's POV (cache invalidation,
+     * audit log, sitemap resync). Fire both the per-panel and generic
+     * hooks so plugin authors can subscribe at either granularity.
+     *
+     * @param  array{
+     *     action: 'created'|'deleted'|'updated',
+     *     id: int,
+     *     from?: array<string, bool|int|string|null>,
+     *     to?: array<string, bool|int|string|null>
+     * }  $diff
+     */
+    protected function fireSaved(array $diff): void
+    {
+        $payload = ['panel' => 'seoRedirects', 'diff' => $diff];
+        Hooks::safeDoAction('keystone.admin.settings.seoRedirects.saved', $payload);
+        Hooks::safeDoAction('keystone.admin.settings.saved', $payload);
     }
 
     /**

@@ -1,5 +1,7 @@
 import { useMemo, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
+import { keystoneConfirm } from '@/lib/admin/confirm';
 import { ToastProvider, useToast } from '@artisanpack-ui/react/feedback';
 import type { FormDataConvertible } from '@inertiajs/core';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
@@ -115,17 +117,38 @@ function Field({
     htmlFor?: string;
     children: ReactNode;
 }) {
-    return (
-        <div className="flex flex-col gap-1.5">
-            <label htmlFor={htmlFor} className="text-xs font-semibold text-base-content">
-                {label}
-            </label>
+    // Wrap the built-in field body through `.settings.field.render` so a
+    // plugin can decorate / wrap / replace an individual settings field
+    // (e.g. add an inline "Learn more" popover, gate a field behind a
+    // feature flag, or swap the control for a plugin-owned variant).
+    // The filter sees the RAW body (control + helper/error) so a
+    // subscriber can wrap it in an extra chrome layer without losing
+    // access to the built-in label — the label is rendered outside the
+    // filter chain so it stays associated with the underlying `htmlFor`.
+    // Args: `(ReactNode, { label, htmlFor, error, helper })`.
+    const body = (
+        <>
             {children}
             {error ? (
                 <span className="text-[11px] text-error">{error}</span>
             ) : helper ? (
                 <span className="text-[11px] text-base-content/55">{helper}</span>
             ) : null}
+        </>
+    );
+
+    const filteredBody = applyFilters<ReactNode>(
+        'keystone.admin.settings.field.render',
+        body,
+        { label, htmlFor, error, helper },
+    );
+
+    return (
+        <div className="flex flex-col gap-1.5">
+            <label htmlFor={htmlFor} className="text-xs font-semibold text-base-content">
+                {label}
+            </label>
+            {filteredBody}
         </div>
     );
 }
@@ -1565,7 +1588,7 @@ function PrivacyPanel({ data }: { data: AdminSettings['privacy'] }) {
         if (category.required) {
             return;
         }
-        if (!window.confirm(`Delete the "${category.name}" consent category? This will not affect stored consents.`)) {
+        if (!keystoneConfirm(`Delete the "${category.name}" consent category? This will not affect stored consents.`)) {
             return;
         }
         router.delete(admin.settings.privacy.categories.destroy({ category: category.id }).url, {
@@ -2171,14 +2194,47 @@ function BillingPanel() {
 /* Page                                                                       */
 /* -------------------------------------------------------------------------- */
 
+type SettingsTab = { key: TabKey; label: string };
+
 function SettingsContent({ settings, options }: SettingsProps) {
-    const [tab, setTab] = useState<TabKey>('general');
+    const currentPath = usePage().url.split('?')[0];
+
+    // Filter the visible tab list so a plugin can add / remove / reorder
+    // Settings sections without forking the page. Args:
+    // `(SettingsTab[], { surface: 'site', currentPath })`. The
+    // `surface` discriminator mirrors `SettingsLayout.tsx`'s
+    // `{ surface: 'account', … }` so a single subscriber that
+    // handles both surfaces can branch on `surface` instead of
+    // sniffing item shapes. A plugin returning a `key` not in the
+    // built-in TabKey union is ignored by the tabpanel switch below,
+    // but the tab still renders in the sidebar (which is what a
+    // plugin surfacing a custom section via `.settings.sections`
+    // typically wants).
+    const filteredTabs = useMemo(
+        () => applyFilters<SettingsTab[]>(
+            'keystone.admin.settings.tabs',
+            tabs,
+            { surface: 'site', currentPath },
+        ),
+        [currentPath],
+    );
+
+    const initialTab: TabKey = filteredTabs[0]?.key ?? 'general';
+    const [selectedTab, setTab] = useState<TabKey>(initialTab);
+    // If a late-registered `.settings.tabs` subscriber removes the
+    // currently-selected tab (or the user navigates and the memo
+    // re-runs against a different `currentPath`), fall back to the
+    // first available tab so the sidebar / panel stay in sync instead
+    // of rendering an empty right pane.
+    const tab: TabKey = filteredTabs.some((t) => t.key === selectedTab)
+        ? selectedTab
+        : initialTab;
 
     // Roving keyboard navigation for the vertical tablist: Up/Down move
     // between tabs (wrapping), Home/End jump to the ends. Without this only
     // the selected tab is reachable (the rest carry tabIndex=-1).
     function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-        const lastIndex = tabs.length - 1;
+        const lastIndex = filteredTabs.length - 1;
         let nextIndex: number | null = null;
 
         switch (event.key) {
@@ -2201,7 +2257,7 @@ function SettingsContent({ settings, options }: SettingsProps) {
         }
 
         event.preventDefault();
-        const nextKey = tabs[nextIndex].key;
+        const nextKey = filteredTabs[nextIndex].key;
         setTab(nextKey);
         document.getElementById(`settings-tab-${nextKey}`)?.focus();
     }
@@ -2222,7 +2278,7 @@ function SettingsContent({ settings, options }: SettingsProps) {
                             aria-orientation="vertical"
                             className="flex flex-col p-1.5"
                         >
-                            {tabs.map((t, index) => (
+                            {filteredTabs.map((t: SettingsTab, index: number) => (
                                 <li key={t.key} role="presentation">
                                     <button
                                         type="button"
@@ -2258,21 +2314,48 @@ function SettingsContent({ settings, options }: SettingsProps) {
                     aria-labelledby={`settings-tab-${tab}`}
                     className="col-span-12 lg:col-span-9"
                 >
-                    {tab === 'general' && (
-                        <GeneralPanel data={settings.general} options={options} />
-                    )}
-                    {tab === 'brand' && <BrandPanel data={settings.brand} />}
-                    {tab === 'seo' && <SeoPanel data={settings.seo} />}
-                    {tab === 'discussion' && <DiscussionPanel data={settings.discussion} />}
-                    {tab === 'permalinks' && <PermalinksPanel data={settings.permalinks} />}
-                    {tab === 'notifications' && (
-                        <NotificationsPanel data={settings.notifications} />
-                    )}
-                    {tab === 'security' && <SecurityPanel data={settings.security} />}
-                    {tab === 'privacy' && <PrivacyPanel data={settings.privacy} />}
-                    {tab === 'performance' && <PerformancePanel data={settings.performance} />}
-                    {tab === 'developers' && <DevelopersPanel data={settings.developers} />}
-                    {tab === 'billing' && <BillingPanel />}
+                    {(() => {
+                        // Resolve the built-in panel for the active tab
+                        // (or `null` when the tab was contributed by a
+                        // plugin), then hand it to `.settings.sections`
+                        // so a plugin can wrap / decorate the panel or
+                        // provide the entire body for a custom tab it
+                        // added via `.settings.tabs`. Starting value is
+                        // `null` for a plugin-added tab so a subscriber
+                        // can render "from scratch" without stripping
+                        // an existing built-in. Args:
+                        // `(ReactNode, { tab, settings, options })`.
+                        let builtIn: ReactNode = null;
+                        if (tab === 'general') {
+                            builtIn = <GeneralPanel data={settings.general} options={options} />;
+                        } else if (tab === 'brand') {
+                            builtIn = <BrandPanel data={settings.brand} />;
+                        } else if (tab === 'seo') {
+                            builtIn = <SeoPanel data={settings.seo} />;
+                        } else if (tab === 'discussion') {
+                            builtIn = <DiscussionPanel data={settings.discussion} />;
+                        } else if (tab === 'permalinks') {
+                            builtIn = <PermalinksPanel data={settings.permalinks} />;
+                        } else if (tab === 'notifications') {
+                            builtIn = <NotificationsPanel data={settings.notifications} />;
+                        } else if (tab === 'security') {
+                            builtIn = <SecurityPanel data={settings.security} />;
+                        } else if (tab === 'privacy') {
+                            builtIn = <PrivacyPanel data={settings.privacy} />;
+                        } else if (tab === 'performance') {
+                            builtIn = <PerformancePanel data={settings.performance} />;
+                        } else if (tab === 'developers') {
+                            builtIn = <DevelopersPanel data={settings.developers} />;
+                        } else if (tab === 'billing') {
+                            builtIn = <BillingPanel />;
+                        }
+
+                        return applyFilters<ReactNode>(
+                            'keystone.admin.settings.sections',
+                            builtIn,
+                            { surface: 'site', tab, currentPath, settings, options },
+                        );
+                    })()}
                 </div>
             </div>
         </div>

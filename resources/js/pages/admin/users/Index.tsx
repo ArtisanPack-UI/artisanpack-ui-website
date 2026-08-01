@@ -78,6 +78,7 @@ export default function Index() {
 
                 <Card padded={false}>
                     <DataTable<AdminUser>
+                        resource="users"
                         columns={[
                             {
                                 key: 'display_name',

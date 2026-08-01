@@ -25,6 +25,7 @@ export default function Customers({ customers }: { customers: CustomerRow[] }) {
 
                 <Card padded={false}>
                     <DataTable<CustomerRow>
+                        resource="customers"
                         columns={[
                             {
                                 key: 'name',

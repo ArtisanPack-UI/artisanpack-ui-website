@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Support\Content\PublicVisibility;
 use App\Support\PermalinkStructure;
 use App\Support\SiteBranding;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
-use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\GlobalStyles;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplatePartResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
@@ -45,16 +45,23 @@ class BlogController extends Controller
 
     public function index(): SymfonyResponse
     {
-        $posts = Post::query()
-            ->with(['author:id,display_name', 'categories:id,slug'])
-            ->where('status', ContentStatus::Published)
-            ->whereNotNull('published_at')
-            ->where('published_at', '<=', now())
-            ->latest('published_at')
-            ->limit(20)
+        doAction('keystone.public.render.blogIndex.before');
+
+        $query = PublicVisibility::posts(
+            Post::query()->with(['author:id,display_name', 'categories:id,slug']),
+        )->latest('published_at');
+
+        /** @var \Illuminate\Database\Eloquent\Builder<Post> $query */
+        $query = applyFilters('keystone.public.blog.index.query', $query);
+
+        /** @var int $perPage */
+        $perPage = (int) applyFilters('keystone.public.blog.index.perPage', 20);
+
+        $posts = $query
+            ->limit(max(1, $perPage))
             ->get(['id', 'title', 'slug', 'excerpt', 'author_id', 'published_at']);
 
-        $response = Inertia::render('Blog/Index', [
+        $data = [
             'posts' => $posts->map(fn (Post $post) => [
                 'id'                   => $post->id,
                 'title'                => $post->title,
@@ -65,20 +72,32 @@ class BlogController extends Controller
                 'published_at'         => optional($post->published_at)->toISOString(),
                 'published_at_display' => keystone_format_date($post->published_at),
             ])->all(),
-        ])->toResponse(request());
+        ];
 
-        return $response->header('Cache-Tag', 'blog:index');
+        /** @var array<string, mixed> $data */
+        $data = applyFilters('keystone.public.render.viewData', $data, [
+            'surface' => 'blogIndex',
+        ]);
+
+        $response = Inertia::render('Blog/Index', $data)->toResponse(request());
+
+        /** @var string $cacheTag */
+        $cacheTag = (string) applyFilters('keystone.public.http.cacheTags', 'blog:index', [
+            'surface' => 'blogIndex',
+        ]);
+
+        $response = $response->header('Cache-Tag', $cacheTag);
+
+        doAction('keystone.public.render.blogIndex.after', $response);
+
+        return $response;
     }
 
     public function show(string $slug): SymfonyResponse
     {
-        $post = Post::query()
-            ->with('author:id,display_name')
-            ->where('slug', $slug)
-            ->where('status', ContentStatus::Published)
-            ->whereNotNull('published_at')
-            ->where('published_at', '<=', now())
-            ->first();
+        $post = PublicVisibility::posts(
+            Post::query()->with('author:id,display_name')->where('slug', $slug),
+        )->first();
 
         if (null === $post) {
             abort(HttpResponse::HTTP_NOT_FOUND);
@@ -101,8 +120,15 @@ class BlogController extends Controller
      * the template's block tree through `<x-ve-blocks :post="$post">` so
      * visual-editor's PostResolver + CommentInliner stamp the post-* and
      * comment-* blocks against the live post.
+     *
+     * `$isPreview` suppresses the `keystone.public.render.post.*` actions
+     * AND the `Cache-Tag` header. Subscribers to those hooks are wired
+     * for public loads (analytics, view counters, CDN cache warm) and
+     * would misfire on preview clicks. The `Cache-Tag` matters because
+     * a Cloudflare purge keyed on `blog:post:{id}` after an edit would
+     * otherwise sweep the preview response out of edge cache too.
      */
-    public function renderPost(Post $post): SymfonyResponse
+    public function renderPost(Post $post, bool $isPreview = false): SymfonyResponse
     {
         $post->loadMissing(['seoMeta', 'featuredImageMedia']);
 
@@ -110,7 +136,11 @@ class BlogController extends Controller
         $template   = $this->themeManager->resolveTemplate('post', $post->slug);
         $activeSlug = $this->themeManager->getActiveTheme()['slug'] ?? null;
 
-        $view = view($template, [
+        if (! $isPreview) {
+            doAction('keystone.public.render.post.before', $post);
+        }
+
+        $data = [
             'post'           => $post,
             // Legacy alias: themes/jmwd-default/index.blade.php (and any
             // template falling back to it) still references `$page`.
@@ -123,10 +153,35 @@ class BlogController extends Controller
             'footerBlocks'   => $this->resolvePartBlocks('footer'),
             'themeJson'      => $this->readThemeJson($activeSlug),
             'siteIcon'       => SiteBranding::icon(),
+        ];
+
+        /** @var array<string, mixed> $data */
+        $data = applyFilters('keystone.public.render.viewData', $data, [
+            'surface' => 'post',
+            'post'    => $post,
         ]);
 
-        return response($view->render())
-            ->header('Cache-Tag', 'blog:post:'.$post->id.',blog:index');
+        $view = view($template, $data);
+
+        $response = response($view->render());
+
+        if (! $isPreview) {
+            /** @var string $cacheTag */
+            $cacheTag = (string) applyFilters(
+                'keystone.public.http.cacheTags',
+                'blog:post:'.$post->id.',blog:index',
+                [
+                    'surface' => 'post',
+                    'post'    => $post,
+                ],
+            );
+
+            $response = $response->header('Cache-Tag', $cacheTag);
+
+            doAction('keystone.public.render.post.after', $post, $response);
+        }
+
+        return $response;
     }
 
     /**

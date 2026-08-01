@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import { update as updateWidget } from '@/routes/admin/dashboards/widgets';
 import { useFocusTrap } from '@/lib/admin/useFocusTrap';
 import type { AvailableWidget, Widget, WidgetOptions } from '@/types/keystone';
@@ -59,7 +60,28 @@ export function WidgetSettingsModal({
     dashboardSlug,
     onClose,
 }: WidgetSettingsModalProps) {
-    const schema = useMemo(() => extractSchema(catalog), [catalog]);
+    const rawSchema = useMemo(() => extractSchema(catalog), [catalog]);
+
+    // Run the extracted schema's field list through
+    // `.dashboard.widget.settings.fields` so a plugin can add / remove /
+    // reorder fields the server-declared schema doesn't cover (e.g. a
+    // plugin-added "background image" field for a widget it extends).
+    // The filter operates on the field list rather than the whole
+    // schema so callers don't need to reconstruct the wrapping shape.
+    // Args: `(SchemaField[], { widget, catalog })`. Returning an empty
+    // list unmounts the modal — matches the "no editable settings" path.
+    const schema = useMemo(() => {
+        if (!rawSchema) {
+            return null;
+        }
+        const fields = applyFilters<SchemaField[]>(
+            'keystone.admin.dashboard.widget.settings.fields',
+            rawSchema.fields,
+            { widget, catalog },
+        );
+        return { fields };
+    }, [rawSchema, widget, catalog]);
+
     const initialValues = useMemo(
         () => seedValues(schema, widget.options),
         [schema, widget.options],
@@ -196,7 +218,7 @@ export function WidgetSettingsModal({
 
                 <form onSubmit={handleSubmit} className="flex flex-col">
                     <div className="flex flex-col gap-4 px-5 py-5">
-                        {schema.fields.map((field) => (
+                        {schema.fields.map((field: SchemaField) => (
                             <FieldRow
                                 key={field.name}
                                 field={field}

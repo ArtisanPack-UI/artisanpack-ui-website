@@ -34,7 +34,13 @@ class AuthenticatedSessionController extends Controller
         // flag, so the challenge controller dispatches a new code.
         $user = $request->user();
 
+        if (null !== $user) {
+            doAction('keystone.auth.loggedIn', $user);
+        }
+
         if (null !== $user && $user->hasTwoFactorEnabled()) {
+            doAction('keystone.auth.twoFactorChallenged', $user);
+
             return redirect()->route('two-factor.challenge');
         }
 
@@ -43,6 +49,14 @@ class AuthenticatedSessionController extends Controller
 
     public function destroy(Request $request): RedirectResponse
     {
+        // The route is `auth`-gated so `$request->user()` should never
+        // be null here, but the guard means a broken middleware chain
+        // can't hand subscribers an anonymous `.loggedOut` event.
+        $user = $request->user();
+        if (null !== $user) {
+            doAction('keystone.auth.loggedOut', $user);
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
@@ -62,6 +76,11 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroyViaLink(Request $request): RedirectResponse
     {
+        $user = $request->user();
+        if (null !== $user) {
+            doAction('keystone.auth.loggedOut', $user);
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

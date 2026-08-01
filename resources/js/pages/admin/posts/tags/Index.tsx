@@ -129,6 +129,7 @@ export default function TagsIndex() {
 
                     <Card padded={false}>
                         <DataTable<TagRow>
+                            resource="posts.tags"
                             columns={[
                                 {
                                     key: 'name',

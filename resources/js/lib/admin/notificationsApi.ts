@@ -9,8 +9,11 @@
  */
 
 import NotificationController from '@/actions/ArtisanPackUI/CMSFramework/Modules/Notifications/Http/Controllers/NotificationController';
+import { apiFetch } from '@/lib/admin/apiFetch';
 import { finishAdminProgress, startAdminProgress } from '@/lib/admin/progress';
 import type { NotificationItem } from '@/types/keystone';
+
+const NOTIFICATIONS_API_SOURCE = 'notificationsApi';
 
 /** Thrown when a notifications request fails. */
 export class NotificationsApiError extends Error {
@@ -42,7 +45,11 @@ async function ensureCsrfCookie(): Promise<void> {
         return;
     }
     if (!csrfPromise) {
-        csrfPromise = fetch('/sanctum/csrf-cookie', { credentials: 'include' })
+        csrfPromise = apiFetch(
+            '/sanctum/csrf-cookie',
+            { method: 'GET', credentials: 'include' },
+            NOTIFICATIONS_API_SOURCE,
+        )
             .then((response) => {
                 if (!response.ok) {
                     throw new NotificationsApiError(
@@ -90,11 +97,15 @@ function toNotificationItem(api: ApiNotification): NotificationItem {
  * blow up the bell badge.
  */
 export async function fetchNotifications(limit = 10): Promise<NotificationItem[]> {
-    const response = await fetch(NotificationController.index.url({ query: { limit } }), {
-        method: 'GET',
-        credentials: 'include',
-        headers: { Accept: 'application/json' },
-    });
+    const response = await apiFetch(
+        NotificationController.index.url({ query: { limit } }),
+        {
+            method: 'GET',
+            credentials: 'include',
+            headers: { Accept: 'application/json' },
+        },
+        NOTIFICATIONS_API_SOURCE,
+    );
 
     if (response.status === 401) {
         return [];
@@ -123,15 +134,19 @@ async function postWithCsrf(url: string): Promise<void> {
         await ensureCsrfCookie();
         const token = getXsrfToken();
 
-        const response = await fetch(url, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                ...(token ? { 'X-XSRF-TOKEN': token } : {}),
+        const response = await apiFetch(
+            url,
+            {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'X-XSRF-TOKEN': token } : {}),
+                },
             },
-        });
+            NOTIFICATIONS_API_SOURCE,
+        );
 
         if (!response.ok) {
             throw new NotificationsApiError(

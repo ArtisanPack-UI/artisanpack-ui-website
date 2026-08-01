@@ -4,15 +4,23 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Admin\Concerns\HandlesPublication;
 use App\Http\Controllers\Controller;
+use App\Models\UserEditorPreference;
 use App\Support\ContentEdit\CustomFieldSupport;
 use App\Support\ContentEdit\PanelSlotSupport;
+use App\Support\ContentEdit\SlugPreview;
+use App\Support\Media\ImageMediaRule;
+use App\Support\PreviewUrl;
 use App\Support\Seo\SeoMetaSupport;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedEntity;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
+use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,6 +35,13 @@ use Inertia\Response;
  */
 class PageController extends Controller
 {
+    use HandlesPublication;
+
+    public function __construct(
+        private readonly PageManager $pages,
+        private readonly TemplateResolver $templates,
+    ) {}
+
     public function index(): Response
     {
         $pages = Page::query()
@@ -40,15 +55,33 @@ class PageController extends Controller
                 'max'     => config('keystone.limits.max_pages'),
                 'current' => $pages->count(),
             ],
+            'newContent' => [
+                'label'          => 'page',
+                'hierarchical'   => true,
+                // Reuse the already-loaded index collection instead of
+                // firing a second unbounded pages query for the modal's
+                // parent picker — same rows, just reshaped + resorted.
+                'parentOptions'  => $pages
+                    ->sortBy(fn (Page $p) => strtolower((string) $p->title))
+                    ->values()
+                    ->map(fn (Page $p) => [
+                        'value' => (int) $p->id,
+                        'label' => (string) $p->title,
+                    ])
+                    ->all(),
+                'templates'      => $this->templateOptions(),
+                'quickCreateUrl' => route('admin.pages.quick-create'),
+            ],
         ]);
     }
 
     /**
-     * Auto-draft flow — creates an "Untitled page" stub (subject to the
-     * `max_pages` limit) and drops the user straight into the Edit screen
-     * so the visual editor mounts immediately.
+     * Quick-create endpoint for the Add New modal (#184). Accepts a
+     * user-supplied title (+ optional parent and template) and creates
+     * a real draft via {@see PageManager::create()} — replaces the old
+     * auto-draft "Untitled page" stub. Same `max_pages` gate as store().
      */
-    public function create(Request $request): RedirectResponse
+    public function quickCreate(Request $request): RedirectResponse
     {
         if ($this->limitReached()) {
             return redirect()
@@ -56,13 +89,18 @@ class PageController extends Controller
                 ->with('error', $this->limitMessage());
         }
 
-        $page = Page::create([
-            'title'     => 'Untitled page',
-            'slug'      => $this->uniqueSlug('untitled-page'),
-            'status'    => ContentStatus::Draft,
-            'author_id' => $request->user()?->id,
-            'order'     => 0,
+        $validated = $request->validate([
+            'title'     => ['required', 'string', 'max:255'],
+            'parent_id' => ['nullable', 'integer', Rule::exists('pages', 'id')],
+            'template'  => ['nullable', 'string', 'max:255'],
         ]);
+
+        $page = $this->pages->create([
+            'title'     => $validated['title'],
+            'status'    => ContentStatus::Draft->value,
+            'parent_id' => $validated['parent_id'] ?? null,
+            'template'  => $validated['template'] ?? null,
+        ], null, $request->user()?->id);
 
         return redirect()->route('admin.pages.edit', $page);
     }
@@ -89,29 +127,26 @@ class PageController extends Controller
             'template'          => ['nullable', 'string', 'max:255'],
             'parent_id'         => ['nullable', 'integer', Rule::exists('pages', 'id')],
             'order'             => ['nullable', 'integer', 'min:0'],
-            'featured_image_id' => ['nullable', 'integer', Rule::exists('media', 'id')->where(fn ($q) => $q->where('mime_type', 'like', 'image/%'))],
+            'featured_image_id' => ImageMediaRule::nullable(),
         ], SeoMetaSupport::rules(), CustomFieldSupport::rules($template)));
 
         $validated = PanelSlotSupport::filterSave('pages', $validated);
 
-        $status = ContentStatus::from($validated['status']);
-
-        $page = new Page([
+        $page = $this->pages->create([
             'title'             => $validated['title'],
-            'slug'              => $validated['slug'] ?: $this->uniqueSlug($validated['title']),
-            'status'            => $status,
+            'slug'              => $validated['slug'] ?? '',
+            'status'            => $validated['status'],
             'excerpt'           => $validated['excerpt'] ?? null,
             'template'          => $validated['template'] ?? null,
             'parent_id'         => $validated['parent_id'] ?? null,
-            'author_id'         => $request->user()?->id,
             'order'             => $validated['order'] ?? 0,
             'featured_image_id' => $validated['featured_image_id'] ?? null,
-            'published_at'      => ContentStatus::Published === $status ? now() : null,
-        ]);
+        ], null, $request->user()?->id);
 
-        CustomFieldSupport::apply($page, $validated['custom_fields'] ?? null);
-
-        $page->save();
+        if (! empty($validated['custom_fields'])) {
+            CustomFieldSupport::apply($page, $validated['custom_fields']);
+            $page->save();
+        }
 
         SeoMetaSupport::save($page, $validated['seo'] ?? null);
 
@@ -120,29 +155,39 @@ class PageController extends Controller
             ->with('success', 'Page created.');
     }
 
-    public function edit(Page $page): Response
+    public function edit(Request $request, Page $page): Response
     {
         $page->loadMissing('author:id,display_name', 'featuredImageMedia');
 
         return Inertia::render('admin/pages/Edit', [
             'page' => [
-                'id'             => $page->id,
-                'title'          => $page->title,
-                'slug'           => $page->slug,
-                'status'         => $page->status->value,
-                'excerpt'        => $page->excerpt,
-                'template'       => $page->template,
-                'parent_id'      => $page->parent_id,
-                'order'          => $page->order,
-                'author'         => $page->author?->display_name,
-                'updated_at'     => optional($page->updated_at)->toISOString(),
-                'featured_image' => $this->featuredImagePayload($page),
-                'seo'            => SeoMetaSupport::payload($page),
+                'id'                      => $page->id,
+                'title'                   => $page->title,
+                'slug'                    => $page->slug,
+                'permalink_template'      => url('/').'/{slug}',
+                'status'                  => $page->status->value,
+                'actual_status'           => $this->actualStatus($page),
+                'has_ever_been_published' => null !== $page->published_at,
+                'excerpt'                 => $page->excerpt,
+                'template'                => $page->template,
+                'parent_id'               => $page->parent_id,
+                'order'                   => $page->order,
+                'author'                  => $page->author?->display_name,
+                'published_at'            => optional($page->published_at)->toISOString(),
+                'updated_at'              => optional($page->updated_at)->toISOString(),
+                'featured_image'          => $this->featuredImagePayload($page),
+                'seo'                     => SeoMetaSupport::payload($page),
+                'preview_url'             => PreviewUrl::for($page),
             ],
             'statuses'      => $this->statusOptions(),
+            'siteTimezone'  => (string) config('app.timezone'),
             'parentOptions' => $this->parentOptions($page),
             'customFields'  => CustomFieldSupport::payload($page),
             'contentEdit'   => PanelSlotSupport::payload('pages', $page),
+            'supports'      => $page->supports(),
+            // #189 — Screen Options hydration. Per-user and per-post-type,
+            // so it is deliberately not part of the `page` payload.
+            'editorPreferences' => UserEditorPreference::payloadFor($request->user(), 'pages'),
         ]);
     }
 
@@ -152,37 +197,35 @@ class PageController extends Controller
             'title'             => ['required', 'string', 'max:255'],
             'slug'              => ['required', 'string', 'max:255', 'alpha_dash', Rule::unique('pages', 'slug')->ignore($page->id)],
             'status'            => ['required', Rule::enum(ContentStatus::class)],
+            'published_at'      => $this->publishedAtRules($request, $page),
             'excerpt'           => ['nullable', 'string', 'max:1000'],
             'template'          => ['nullable', 'string', 'max:255'],
-            'parent_id'         => ['nullable', 'integer', Rule::exists('pages', 'id')->whereNot('id', $page->id)],
+            'parent_id'         => [
+                'nullable',
+                'integer',
+                Rule::exists('pages', 'id')->whereNot('id', $page->id),
+                $this->parentIsNotDescendant($page),
+            ],
             'order'             => ['nullable', 'integer', 'min:0'],
-            'featured_image_id' => ['nullable', 'integer', Rule::exists('media', 'id')->where(fn ($q) => $q->where('mime_type', 'like', 'image/%'))],
+            'featured_image_id' => ImageMediaRule::nullable(),
         ], SeoMetaSupport::rules(), CustomFieldSupport::rules($page)));
 
         $validated = PanelSlotSupport::filterSave('pages', $validated, $page);
 
-        $status       = ContentStatus::from($validated['status']);
-        $wasPublished = ContentStatus::Published === $page->status;
-        $nowPublished = ContentStatus::Published === $status;
+        // Apply custom fields BEFORE the manager fill+save so both
+        // hardcoded columns and metadata JSON land in one UPDATE —
+        // observers fire exactly once per admin edit.
+        CustomFieldSupport::apply($page, $validated['custom_fields'] ?? null);
 
-        $page->fill([
+        $this->pages->update($page, array_merge([
             'title'             => $validated['title'],
             'slug'              => $validated['slug'],
-            'status'            => $status,
             'excerpt'           => $validated['excerpt'] ?? null,
             'template'          => $validated['template'] ?? null,
             'parent_id'         => $validated['parent_id'] ?? null,
             'order'             => $validated['order'] ?? 0,
             'featured_image_id' => $validated['featured_image_id'] ?? null,
-        ]);
-
-        if ($nowPublished && ! $wasPublished) {
-            $page->published_at = now();
-        }
-
-        CustomFieldSupport::apply($page, $validated['custom_fields'] ?? null);
-
-        $page->save();
+        ], $this->resolvePublication($validated, $page)));
 
         SeoMetaSupport::save($page, $validated['seo'] ?? null);
 
@@ -193,11 +236,37 @@ class PageController extends Controller
 
     public function destroy(Page $page): RedirectResponse
     {
-        $page->delete();
+        $this->pages->delete($page);
 
         return redirect()
             ->route('admin.pages.index')
             ->with('success', 'Page deleted.');
+    }
+
+    /**
+     * Live slug preview for the Page edit screen (#185). Mirror of
+     * {@see PostController::slugPreview()} — same shape so the frontend
+     * component can share code between resources.
+     *
+     * @return array{slug: string, auto_adjusted: bool}
+     */
+    public function slugPreview(Request $request): array
+    {
+        // See PostController::slugPreview() — no `Rule::exists` on
+        // `ignore_id` so the per-keystroke preview skips the extra
+        // SELECT. Save-time uniqueness still enforced by the
+        // `Rule::unique('pages', 'slug')` on `update()`.
+        $validated = $request->validate([
+            'title'     => ['required', 'string', 'max:255'],
+            'ignore_id' => ['nullable', 'integer'],
+        ]);
+
+        return SlugPreview::make(
+            Page::class,
+            $validated['title'],
+            'page',
+            $validated['ignore_id'] ?? null,
+        );
     }
 
     public function duplicate(Request $request, Page $page): RedirectResponse
@@ -208,12 +277,7 @@ class PageController extends Controller
                 ->with('error', $this->limitMessage());
         }
 
-        $copy            = $page->replicate(['published_at']);
-        $copy->title     = $page->title.' (Copy)';
-        $copy->slug      = $this->uniqueSlug($page->slug.'-copy');
-        $copy->status    = ContentStatus::Draft;
-        $copy->author_id = $request->user()?->id ?? $page->author_id;
-        $copy->save();
+        $copy = $this->pages->duplicate($page, $request->user()?->id);
 
         return redirect()
             ->route('admin.pages.edit', $copy)
@@ -287,6 +351,25 @@ class PageController extends Controller
     }
 
     /**
+     * Resolved templates for the active theme, shaped for the Add New
+     * modal's template picker. Empty when no theme is active or no
+     * templates are declared — the modal treats that as "hide the
+     * template field."
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function templateOptions(): array
+    {
+        return array_values(array_map(
+            fn (ResolvedEntity $t) => [
+                'value' => $t->slug,
+                'label' => (string) ($t->title ?? $t->slug),
+            ],
+            $this->templates->all(),
+        ));
+    }
+
+    /**
      * @return array<int, array{value: string, label: string}>
      */
     private function statusOptions(): array
@@ -296,6 +379,50 @@ class PageController extends Controller
             ['value' => ContentStatus::Published->value, 'label' => 'Published'],
             ['value' => ContentStatus::Scheduled->value, 'label' => 'Scheduled'],
         ];
+    }
+
+    /**
+     * Closure rule rejecting a parent that lives underneath the page being
+     * edited.
+     *
+     * `Rule::exists(...)->whereNot('id', $page->id)` only blocks a page
+     * from parenting itself, so A→B followed by B→A produced a cycle: the
+     * two pages become unreachable from the tree root, and anything that
+     * walks ancestors (breadcrumbs, nested permalinks, the parent picker)
+     * loops forever on them.
+     *
+     * The walk is bounded independently of the cycle check — an existing
+     * cycle in the data would otherwise make the guard itself hang.
+     */
+    private function parentIsNotDescendant(Page $page): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail) use ($page): void {
+            if (null === $value || '' === $value) {
+                return;
+            }
+
+            $ancestorId = (int) $value;
+            $seen       = [];
+
+            for ($hops = 0; $hops < 100 && $ancestorId > 0; $hops++) {
+                if ($ancestorId === $page->id) {
+                    $fail(__('That page is already below this one, which would create a loop.'));
+
+                    return;
+                }
+
+                if (isset($seen[$ancestorId])) {
+                    return;
+                }
+
+                $seen[$ancestorId] = true;
+
+                /** @var mixed $next */
+                $next = Page::query()->whereKey($ancestorId)->value('parent_id');
+
+                $ancestorId = is_numeric($next) ? (int) $next : 0;
+            }
+        };
     }
 
     private function limitReached(): bool
@@ -312,16 +439,21 @@ class PageController extends Controller
         return "You've reached the {$max}-page limit for this plan. Delete an existing page or upgrade to add more.";
     }
 
-    private function uniqueSlug(string $source): string
+    /**
+     * Server-derived read-only status for the Publish box's status
+     * pill (#187). Mirrors PostController::actualStatus() — a
+     * Scheduled row whose `published_at` is in the past is treated
+     * as effectively Published even if the DB column hasn't been
+     * flipped yet.
+     */
+    private function actualStatus(Page $page): string
     {
-        $base = Str::slug($source) ?: 'page';
-        $slug = $base;
-        $i    = 2;
-
-        while (Page::query()->where('slug', $slug)->exists()) {
-            $slug = $base.'-'.$i++;
+        if (ContentStatus::Scheduled === $page->status
+            && null !== $page->published_at
+            && $page->published_at->isPast()) {
+            return ContentStatus::Published->value;
         }
 
-        return $slug;
+        return $page->status->value;
     }
 }

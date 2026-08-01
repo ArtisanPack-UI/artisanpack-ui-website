@@ -1,25 +1,42 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
+import {
+    applyEditDelete,
+    fireEditDeleted,
+    fireEditFormError,
+    fireEditFormSubmit,
+    fireEditFormSuccess,
+    useEditFormDirty,
+    useEditFormState,
+    useEditFormValidate,
+    useEditLeaveConfirm,
+} from '@/lib/admin/editHooks';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Icon, PageHeader } from '@/components/admin/keystone';
-import CollapsibleCard from '@/components/admin/CollapsibleCard';
-import FeaturedImagePicker, {
-    type FeaturedImageRecord,
-} from '@/components/admin/FeaturedImagePicker';
+import { type ActualStatus } from '@/components/admin/editor/panels/PublishPanel';
+import { type FeaturedImageRecord } from '@/components/admin/FeaturedImagePicker';
 import SeoMetaCard, { type SeoMetaForm } from '@/components/admin/SeoMetaCard';
 import VisualEditor from '@/components/admin/VisualEditor';
 import CustomFieldsSection from '@/components/admin/custom-fields/CustomFieldsSection';
 import { mergeCustomFieldValues } from '@/components/admin/custom-fields/mergeValues';
+import { keystoneConfirm } from '@/lib/admin/confirm';
+import { focusFirstInvalidField } from '@/lib/admin/focusFirstInvalidField';
 import type { CustomFieldRecord } from '@/components/admin/custom-fields/types';
 import AdminEditSlot from '@/components/admin/panels/AdminEditSlot';
-import { destroy, index, update } from '@/routes/admin/posts';
+import SlugField from '@/components/admin/SlugField';
+import PublishPanel, { type StatusOption } from '@/components/admin/editor/panels/PublishPanel';
+import CategoriesPanel from '@/components/admin/editor/panels/CategoriesPanel';
+import TagsPanel from '@/components/admin/editor/panels/TagsPanel';
+import FeaturedImagePanel from '@/components/admin/editor/panels/FeaturedImagePanel';
+import ExcerptPanel from '@/components/admin/editor/panels/ExcerptPanel';
+import ScreenOptions from '@/components/admin/editor/ScreenOptions';
+import EditorPanelLayout from '@/components/admin/editor/EditorPanelLayout';
+import { useEditorLayout } from '@/components/admin/editor/useEditorLayout';
+import type { EditorPreferencesPayload } from '@/lib/admin/editorPreferencesApi';
+import { destroy, index, slugPreview, update } from '@/routes/admin/posts';
 import { store as categoryStore } from '@/routes/admin/posts/categories';
 import { store as tagStore } from '@/routes/admin/posts/tags';
-
-interface StatusOption {
-    value: 'draft' | 'published' | 'scheduled';
-    label: string;
-}
 
 interface CategoryOption {
     value: number;
@@ -31,7 +48,10 @@ interface AdminPost {
     title: string;
     slug: string;
     permalink: string;
+    permalink_template: string;
     status: StatusOption['value'];
+    actual_status: ActualStatus;
+    has_ever_been_published: boolean;
     excerpt: string | null;
     author: string | null;
     category_ids: number[];
@@ -40,52 +60,215 @@ interface AdminPost {
     updated_at: string | null;
     featured_image: FeaturedImageRecord | null;
     seo: SeoMetaForm;
+    /** Signed, time-limited preview URL. Null when the record type isn't previewable. */
+    preview_url: string | null;
 }
 
 interface PageProps {
     post: AdminPost;
     statuses: StatusOption[];
+    siteTimezone: string;
     categories: CategoryOption[];
     tags: CategoryOption[];
     customFields: CustomFieldRecord[];
+    supports: string[];
+    /** Per-user, per-post-type panel visibility, order, and collapse state. */
+    editorPreferences: EditorPreferencesPayload;
     errors: Record<string, string>;
     flash?: { success?: string; error?: string };
     [key: string]: unknown;
 }
 
 export default function Edit() {
-    const { post, statuses, categories, tags, customFields, errors, flash } =
-        usePage<PageProps>().props;
-    const [form, setForm] = useState({
-        title: post.title,
-        slug: post.slug,
-        status: post.status,
-        excerpt: post.excerpt ?? '',
-        category_ids: post.category_ids,
-        tag_ids: post.tag_ids,
-        featured_image: post.featured_image,
-        seo: post.seo,
-        custom_fields: {} as Record<string, unknown>,
-    });
+    const {
+        post,
+        statuses,
+        siteTimezone,
+        categories,
+        tags,
+        customFields,
+        supports,
+        editorPreferences,
+        errors,
+        flash,
+    } = usePage<PageProps>().props;
+    const has = (flag: string): boolean => flag === 'title' || supports.includes(flag);
+    const initialForm = useMemo(
+        () => ({
+            title: post.title,
+            slug: post.slug,
+            status: post.status,
+            published_at: post.published_at,
+            excerpt: post.excerpt ?? '',
+            category_ids: post.category_ids,
+            tag_ids: post.tag_ids,
+            featured_image: post.featured_image,
+            seo: post.seo,
+            custom_fields: {} as Record<string, unknown>,
+        }),
+        [post],
+    );
+    const [form, setForm] = useState(initialForm);
+    // Dirty baseline lives in its own state so a successful save can
+    // clear the dirty flag (see the `onSuccess` in `submit` below).
+    // Without this, `isDirty` would keep comparing against the initial
+    // hydration and would stay `true` after PUT because Inertia's
+    // PUT/PATCH visits preserve local React state by default and the
+    // `custom_fields` slice (server never ships hydration for it) never
+    // round-trips back into `initialForm`.
+    const [baseline, setBaseline] = useState(initialForm);
 
-    function submit(e: FormEvent) {
-        e.preventDefault();
+    // Fire generic + resource-scoped .edit.form.state per state change,
+    // .edit.form.dirty on dirty-flip, and register the leave-confirm
+    // warning while the form is dirty. Also route the incoming server
+    // error map through the .edit.form.validate filter so plugins can
+    // inject client-side validation.
+    useEditFormState('posts', post.id, form);
+    const isDirty = useMemo(
+        () => JSON.stringify(form) !== JSON.stringify(baseline),
+        [form, baseline],
+    );
+    useEditFormDirty('posts', post.id, isDirty);
+    useEditLeaveConfirm('posts', post.id, isDirty);
+    const filteredErrors = useEditFormValidate('posts', post.id, form, errors);
+    // Panels this screen can render at all. `supports` gates what the
+    // content type offers; Custom fields drops out on top of that when no
+    // field is registered, because the section renders nothing and an
+    // empty slot in the layout would still be draggable and listed in
+    // Screen Options.
+    const availablePanelIds = useMemo(
+        () =>
+            [
+                'publish',
+                'categories',
+                'tags',
+                // No `attributes`: this screen doesn't render
+                // `AttributesPanel` at all, so offering it in Screen
+                // Options would list a panel that can never appear.
+                'featured_image',
+                'excerpt',
+                'seo',
+                customFields.length > 0 ? 'custom_fields' : null,
+            ].filter((id): id is string => null !== id),
+        [customFields.length],
+    );
+    // Declared after `filteredErrors` because a panel holding an error is
+    // forced visible — and forced open — regardless of the saved layout.
+    const layout = useEditorLayout(
+        'posts',
+        supports,
+        availablePanelIds,
+        editorPreferences,
+        filteredErrors,
+    );
+
+    function submit(e: FormEvent | null, statusOverride?: StatusOption['value']) {
+        e?.preventDefault();
         // Inertia's FormDataConvertible covers primitives and arrays of
         // primitives. `featured_image` is the picker's local hydration
         // record, so we replace it with `featured_image_id` on submit.
         // The SEO sub-form's image pickers are reshaped the same way.
         const { featured_image: _featuredImage, seo, custom_fields, ...rest } = form;
-        router.put(update(post.id).url, {
+        const effectiveStatus = statusOverride ?? form.status;
+        // Save Draft over a Scheduled row overrides the payload but
+        // the visible select was reading `form.status` — without
+        // pulling `form` in sync, the picker snaps back to the old
+        // value on next render AND the dirty pill relights because
+        // baseline (now 'draft') no longer matches form ('scheduled').
+        if (statusOverride && statusOverride !== form.status) {
+            setForm((f) => ({ ...f, status: statusOverride }));
+        }
+        const rawPayload = {
             ...rest,
+            status: effectiveStatus,
             featured_image_id: form.featured_image?.id ?? null,
             seo: serializeSeo(seo),
             custom_fields: mergeCustomFieldValues(customFields, custom_fields),
+        };
+        // Plugins can rewrite the submit payload — inject additional fields,
+        // sanitize user input, prefix slug — through the generic
+        // `keystone.admin.edit.form.beforeSubmit` filter or the
+        // resource-scoped `.posts.edit.form.beforeSubmit` variant. Args:
+        // `(payload, { resource, id })`; return the (possibly rewritten)
+        // payload, or `false` to veto the submit entirely.
+        //
+        // Vetoing is silent by design — see docs/hooks.md. A subscriber
+        // that returns `false` is responsible for its own user feedback
+        // (toast, modal, inline error) because the shell can't know why
+        // the plugin vetoed.
+        const generic = applyFilters<typeof rawPayload | false>(
+            'keystone.admin.edit.form.beforeSubmit',
+            rawPayload,
+            { resource: 'posts', id: post.id },
+        );
+        if (false === generic) return;
+        const scoped = applyFilters<typeof rawPayload | false>(
+            'keystone.admin.posts.edit.form.beforeSubmit',
+            generic,
+            { resource: 'posts', id: post.id },
+        );
+        if (false === scoped) return;
+        fireEditFormSubmit('posts', post.id, scoped);
+        // Snapshot the submitted form so `onSuccess` can flip the
+        // baseline to the values the server now has. Reading `form`
+        // directly inside the callback would risk clobbering
+        // additional edits the user made while the request was in
+        // flight — the snapshot only reflects what was actually sent.
+        // Apply the same status override to the baseline so a Save
+        // Draft over a Scheduled row doesn't leave the dirty flag on.
+        const submittedForm = { ...form, status: effectiveStatus };
+        router.put(update(post.id).url, scoped, {
+            onSuccess: (page) => {
+                // `slug`, `status`, and `published_at` are server-owned:
+                // publishing with "Immediately" sends `published_at: null`
+                // and gets a real timestamp back, a future date on
+                // Published comes back as Scheduled, and a colliding slug
+                // comes back adjusted. Rebasing from the fresh page props
+                // — not the submitted snapshot — is what stops the panel
+                // showing "Immediately" over a record that has a date, and
+                // stops the next Update resubmitting the stale value.
+                //
+                // Read off `page`, not the component-scope `post`: this
+                // closure captured the props from before the visit.
+                const saved = (page.props as unknown as PageProps).post;
+                const rebased = {
+                    ...submittedForm,
+                    slug: saved.slug,
+                    status: saved.status,
+                    published_at: saved.published_at,
+                };
+
+                setForm((current) => ({
+                    ...current,
+                    // Only adopt the server's value where the user hasn't
+                    // typed something newer while the request was in
+                    // flight — otherwise their edit would vanish, and
+                    // silently, because the baseline matches it too.
+                    slug: current.slug === submittedForm.slug ? saved.slug : current.slug,
+                    status:
+                        current.status === submittedForm.status ? saved.status : current.status,
+                    published_at:
+                        current.published_at === submittedForm.published_at
+                            ? saved.published_at
+                            : current.published_at,
+                }));
+                setBaseline(rebased);
+                fireEditFormSuccess('posts', post.id, page);
+            },
+            onError: (formErrors) => {
+                fireEditFormError('posts', post.id, formErrors);
+                focusFirstInvalidField();
+            },
         });
     }
 
     function handleDelete() {
-        if (!confirm(`Delete "${post.title}"? This cannot be undone.`)) return;
-        router.delete(destroy(post.id).url);
+        const gated = applyEditDelete('posts', post.id, post);
+        if (false === gated) return;
+        if (!keystoneConfirm(`Delete "${post.title}"? This cannot be undone.`)) return;
+        router.delete(destroy(post.id).url, {
+            onSuccess: () => fireEditDeleted('posts', post.id, post),
+        });
     }
 
     function toggleCategory(id: number) {
@@ -106,58 +289,126 @@ export default function Edit() {
         }));
     }
 
-    const categorySummary =
-        form.category_ids.length === 0
-            ? 'Uncategorized'
-            : categories
-                  .filter((c) => form.category_ids.includes(c.value))
-                  .map((c) => c.label)
-                  .join(', ');
-
-    const tagSummary =
-        form.tag_ids.length === 0
-            ? 'No tags'
-            : tags
-                  .filter((t) => form.tag_ids.includes(t.value))
-                  .map((t) => t.label)
-                  .join(', ');
+    // Panel bodies keyed by registry id. `EditorPanelLayout` renders them
+    // in the user's saved column and order; an entry that resolves to
+    // `null` is skipped, which is how `supports` opts a post type out.
+    const panelNodes: Record<string, ReactNode> = {
+        publish: (
+            <PublishPanel
+                status={form.status}
+                initialStatus={post.status}
+                actualStatus={post.actual_status}
+                statuses={statuses}
+                hasEverBeenPublished={post.has_ever_been_published}
+                author={post.author}
+                showAuthor={has('author')}
+                publishedAt={form.published_at}
+                siteTimezone={siteTimezone}
+                isDirty={isDirty}
+                previewUrl={post.preview_url}
+                statusError={filteredErrors.status}
+                publishedAtError={filteredErrors.published_at}
+                onStatusChange={(status) => setForm((f) => ({ ...f, status }))}
+                onPublishedAtChange={(published_at) => setForm((f) => ({ ...f, published_at }))}
+                onSaveDraft={() => submit(null, 'draft')}
+                onDelete={handleDelete}
+            />
+        ),
+        categories: has('categories') ? (
+            <CategoriesPanel
+                options={categories}
+                selected={form.category_ids}
+                onToggle={toggleCategory}
+                createUrl={categoryStore().url}
+            />
+        ) : null,
+        tags: has('tags') ? (
+            <TagsPanel
+                options={tags}
+                selected={form.tag_ids}
+                onToggle={toggleTag}
+                createUrl={tagStore().url}
+            />
+        ) : null,
+        featured_image: has('featured_image') ? (
+            <FeaturedImagePanel
+                value={form.featured_image}
+                onChange={(next) => setForm((f) => ({ ...f, featured_image: next }))}
+                context={`post-${post.id}`}
+                resource="posts"
+            />
+        ) : null,
+        excerpt: has('excerpt') ? (
+            <ExcerptPanel
+                value={form.excerpt}
+                error={filteredErrors.excerpt}
+                onChange={(excerpt) => setForm((f) => ({ ...f, excerpt }))}
+            />
+        ) : null,
+        seo: has('seo') ? (
+            <SeoMetaCard
+                value={form.seo}
+                onChange={(next) => setForm((f) => ({ ...f, seo: next }))}
+                errors={filteredErrors}
+                contextPrefix={`post-${post.id}`}
+                resource="posts"
+            />
+        ) : null,
+        custom_fields: has('custom_fields') ? (
+            <CustomFieldsSection
+                fields={customFields}
+                values={form.custom_fields}
+                errors={filteredErrors}
+                onChange={(key, value) =>
+                    setForm((f) => ({
+                        ...f,
+                        custom_fields: { ...f.custom_fields, [key]: value },
+                    }))
+                }
+            />
+        ) : null,
+    };
 
     return (
         <>
             <Head title={`Edit ${post.title}`} />
+            <AdminEditSlot
+                slot="before-form"
+                contentType="posts"
+                record={post as unknown as Record<string, unknown>}
+            />
             <form onSubmit={submit} className="flex flex-col gap-4">
                 <PageHeader
-                    title={post.title || 'Untitled post'}
-                    description={post.permalink}
                     breadcrumbs={['Blog Posts', post.title || 'Untitled']}
                     actions={
-                        <div className="flex items-center gap-2">
+                        <>
+                            <ScreenOptions
+                                panels={layout.hideablePanels}
+                                hidden={layout.hidden}
+                                onToggle={layout.toggleHidden}
+                                onReset={layout.reset}
+                            />
                             <Link
                                 href={index().url}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-base-300/60 bg-base-100 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-base-300/60 bg-base-100 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
                             >
                                 Back
                             </Link>
-                            <button
-                                type="button"
-                                onClick={handleDelete}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-error/30 bg-base-100 px-3 py-2 text-xs font-semibold text-error hover:bg-error/10"
-                            >
-                                Delete
-                            </button>
-                            <button
-                                type="submit"
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90"
-                            >
-                                {Icon.edit}
-                                Save changes
-                            </button>
-                        </div>
+                        </>
                     }
                 />
 
                 {flash?.success && (
-                    <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
+                    <div
+                        /*
+                         * `role="status"` — the save confirmation is the
+                         * single most important state change on this screen
+                         * and it was landing silently. The node is inserted
+                         * fresh by the Inertia visit, which is what a polite
+                         * live region announces.
+                         */
+                        role="status"
+                        className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
                         {flash.success}
                     </div>
                 )}
@@ -167,376 +418,115 @@ export default function Edit() {
                     contentType="posts"
                     record={post as unknown as Record<string, unknown>}
                 />
-                <AdminEditSlot
-                    slot="sidebar-top"
-                    contentType="posts"
-                    record={post as unknown as Record<string, unknown>}
-                />
 
-                <CollapsibleCard title="Content" defaultOpen>
-                    <div className="grid gap-5 md:grid-cols-2">
-                        <Field
-                            label="Title"
-                            error={errors.title}
-                            input={
+                <EditorPanelLayout
+                    layout={layout}
+                    panels={panelNodes}
+                    sidebarTop={
+                        <AdminEditSlot
+                            slot="sidebar-top"
+                            contentType="posts"
+                            record={post as unknown as Record<string, unknown>}
+                        />
+                    }
+                    sidebarBottom={
+                        <AdminEditSlot
+                            slot="sidebar-bottom"
+                            contentType="posts"
+                            record={post as unknown as Record<string, unknown>}
+                        />
+                    }
+                    editor={
+                        <>
+                            {/*
+                             * A fully borderless title read as static text
+                             * in early testing — users didn't realize it
+                             * was editable. Keep a hairline underline at
+                             * rest, plus a muted pencil affordance, so the
+                             * click target is discoverable; deepen on
+                             * hover, promote to primary on focus.
+                             *
+                             * `focus-within` targets the wrapper so the
+                             * pencil visibility follows the input's focus
+                             * state (the icon fades out once you're
+                             * actively typing).
+                             */}
+                            <div className="group relative flex items-center rounded-t-md border-b border-base-300/60 hover:border-base-content/40 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/40">
                                 <input
                                     type="text"
                                     value={form.title}
                                     onChange={(e) =>
-                                        setForm({ ...form, title: e.target.value })
+                                        setForm((f) => ({ ...f, title: e.target.value }))
                                     }
-                                    className="h-9 w-full rounded-md border border-base-300/60 bg-base-100 px-3 text-sm outline-none focus:border-primary"
+                                    placeholder="Add title"
+                                    aria-label="Title"
+                                    aria-invalid={filteredErrors.title ? true : undefined}
+                                    aria-describedby={
+                                        filteredErrors.title ? 'post-title-error' : undefined
+                                    }
+                                    className="w-full border-0 bg-transparent px-0 py-2 pr-8 text-3xl font-semibold text-base-content outline-none placeholder:text-base-content/40"
                                 />
-                            }
-                        />
-                        <Field
-                            label="Slug"
-                            error={errors.slug}
-                            input={
-                                <input
-                                    type="text"
-                                    value={form.slug}
-                                    onChange={(e) =>
-                                        setForm({ ...form, slug: e.target.value })
-                                    }
-                                    className="h-9 w-full rounded-md border border-base-300/60 bg-base-100 px-3 font-mono text-sm outline-none focus:border-primary"
-                                />
-                            }
-                        />
-                        <div className="md:col-span-2">
-                            <Field
-                                label="Excerpt"
-                                hint="Short summary shown in listings and meta tags."
-                                error={errors.excerpt}
-                                input={
-                                    <textarea
-                                        rows={3}
-                                        value={form.excerpt}
-                                        onChange={(e) =>
-                                            setForm({
-                                                ...form,
-                                                excerpt: e.target.value,
-                                            })
-                                        }
-                                        className="w-full rounded-md border border-base-300/60 bg-base-100 px-3 py-2 text-sm outline-none focus:border-primary"
-                                    />
-                                }
-                            />
-                        </div>
-                    </div>
-                </CollapsibleCard>
-
-                <CollapsibleCard
-                    title="Publishing"
-                    summary={`${form.status} · ${post.author ?? '—'}`}
-                    defaultOpen
-                >
-                    <div className="grid gap-5 md:grid-cols-2">
-                        <Field
-                            label="Status"
-                            error={errors.status}
-                            input={
-                                <select
-                                    value={form.status}
-                                    onChange={(e) =>
-                                        setForm({
-                                            ...form,
-                                            status: e.target
-                                                .value as StatusOption['value'],
-                                        })
-                                    }
-                                    className="h-9 w-full rounded-md border border-base-300/60 bg-base-100 px-3 text-sm outline-none focus:border-primary"
+                                <span
+                                    aria-hidden
+                                    className="pointer-events-none absolute right-1 flex items-center text-base-content/40 transition-opacity group-hover:text-base-content/70 group-focus-within:opacity-0"
                                 >
-                                    {statuses.map((s) => (
-                                        <option key={s.value} value={s.value}>
-                                            {s.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            }
-                        />
-                        <Field
-                            label="Author"
-                            input={
-                                <div className="flex h-9 items-center rounded-md border border-base-300/60 bg-base-200/40 px-3 text-sm text-base-content/65">
-                                    {post.author ?? '—'}
+                                    {Icon.edit}
+                                </span>
+                            </div>
+                            {filteredErrors.title && (
+                                <div
+                                    id="post-title-error"
+                                    role="alert"
+                                    className="-mt-2 text-xs text-error"
+                                >
+                                    {filteredErrors.title}
                                 </div>
-                            }
-                        />
-                    </div>
-                </CollapsibleCard>
+                            )}
+                            <SlugField
+                                title={form.title}
+                                slug={form.slug}
+                                autoDeriveAllowed={
+                                    form.status === 'draft' && !post.has_ever_been_published
+                                }
+                                previewUrl={slugPreview().url}
+                                ignoreId={post.id}
+                                permalinkTemplate={post.permalink_template}
+                                error={filteredErrors.slug}
+                                onSlugChange={(slug) => setForm((f) => ({ ...f, slug }))}
+                            />
 
-                <CollapsibleCard
-                    title="Taxonomies"
-                    summary={[categorySummary, tagSummary].join(' · ')}
-                    defaultOpen
-                >
-                    <div className="grid gap-5 sm:grid-cols-2">
-                        <TaxonomyPicker
-                            label="Categories"
-                            createLabel="Add new category"
-                            emptyLabel="No categories yet"
-                            emptyHint="Create the first category below to start organizing posts."
-                            options={categories}
-                            selected={form.category_ids}
-                            onToggle={toggleCategory}
-                            createUrl={categoryStore().url}
-                            createError={errors.name}
-                        />
-                        <TaxonomyPicker
-                            label="Tags"
-                            createLabel="Add new tag"
-                            emptyLabel="No tags yet"
-                            emptyHint="Create the first tag below to label posts."
-                            options={tags}
-                            selected={form.tag_ids}
-                            onToggle={toggleTag}
-                            createUrl={tagStore().url}
-                            createError={errors.name}
-                        />
-                    </div>
-                </CollapsibleCard>
+                            <AdminEditSlot
+                                slot="before-editor"
+                                contentType="posts"
+                                record={post as unknown as Record<string, unknown>}
+                            />
 
-                <CollapsibleCard
-                    title="Featured image"
-                    summary={form.featured_image?.title ?? (form.featured_image ? 'Image set' : 'No image set')}
-                    defaultOpen
-                >
-                    <FeaturedImagePicker
-                        value={form.featured_image}
-                        onChange={(next) => setForm({ ...form, featured_image: next })}
-                        context={`post-${post.id}`}
-                    />
-                </CollapsibleCard>
+                            {has('editor') && (
+                                <VisualEditor
+                                    resource="posts"
+                                    id={post.id}
+                                    initialTitle={post.title}
+                                    initialSlug={post.slug}
+                                    initialStatus={post.status}
+                                    supports={{ title: false, document: false }}
+                                />
+                            )}
 
-                <SeoMetaCard
-                    value={form.seo}
-                    onChange={(next) => setForm({ ...form, seo: next })}
-                    errors={errors as unknown as Record<string, string>}
-                    contextPrefix={`post-${post.id}`}
-                />
-
-                <CustomFieldsSection
-                    fields={customFields}
-                    values={form.custom_fields}
-                    errors={errors as unknown as Record<string, string>}
-                    onChange={(key, value) =>
-                        setForm((f) => ({
-                            ...f,
-                            custom_fields: { ...f.custom_fields, [key]: value },
-                        }))
+                            <AdminEditSlot
+                                slot="after-editor"
+                                contentType="posts"
+                                record={post as unknown as Record<string, unknown>}
+                            />
+                        </>
                     }
                 />
-
-                <AdminEditSlot
-                    slot="sidebar-bottom"
-                    contentType="posts"
-                    record={post as unknown as Record<string, unknown>}
-                />
-
-                <AdminEditSlot
-                    slot="before-editor"
-                    contentType="posts"
-                    record={post as unknown as Record<string, unknown>}
-                />
-
-                <VisualEditor
-                    resource="posts"
-                    id={post.id}
-                    initialTitle={post.title}
-                    initialSlug={post.slug}
-                    initialStatus={post.status}
-                    supports={{ title: false, document: false }}
-                />
-
-                <AdminEditSlot
-                    slot="after-editor"
-                    contentType="posts"
-                    record={post as unknown as Record<string, unknown>}
-                />
             </form>
+            <AdminEditSlot
+                slot="after-form"
+                contentType="posts"
+                record={post as unknown as Record<string, unknown>}
+            />
         </>
-    );
-}
-
-function Field({
-    label,
-    error,
-    hint,
-    input,
-}: {
-    label: string;
-    error?: string;
-    hint?: string;
-    input: ReactNode;
-}) {
-    return (
-        <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-semibold text-base-content/85">{label}</span>
-            {input}
-            {hint && !error && (
-                <span className="text-xs text-base-content/55">{hint}</span>
-            )}
-            {error && <span className="text-xs text-error">{error}</span>}
-        </label>
-    );
-}
-
-function PlaceholderPanel({ label, hint }: { label: string; hint: string }) {
-    return (
-        <div className="rounded-lg border border-dashed border-base-300 bg-base-200/30 px-5 py-6 text-center">
-            <div className="text-sm font-semibold text-base-content/75">
-                {label}
-            </div>
-            <div className="mt-1 text-xs text-base-content/55">{hint}</div>
-        </div>
-    );
-}
-
-interface TaxonomyOption {
-    value: number;
-    label: string;
-}
-
-function TaxonomyPicker({
-    label,
-    createLabel,
-    emptyLabel,
-    emptyHint,
-    options,
-    selected,
-    onToggle,
-    createUrl,
-    createError,
-}: {
-    label: string;
-    createLabel: string;
-    emptyLabel: string;
-    emptyHint: string;
-    options: TaxonomyOption[];
-    selected: number[];
-    onToggle: (id: number) => void;
-    createUrl: string;
-    createError?: string;
-}) {
-    const [creating, setCreating] = useState(false);
-    const [draftName, setDraftName] = useState('');
-    const [submitting, setSubmitting] = useState(false);
-
-    // HTML doesn't allow nested <form>s, and this picker lives inside the
-    // outer post-update form. Wrap the inline create UI in a <div> and
-    // handle "submit on Enter" with an explicit keydown handler so the
-    // Enter keypress never bubbles up to the parent form.
-    function submitCreate() {
-        const name = draftName.trim();
-        if (name === '' || submitting) return;
-        setSubmitting(true);
-        router.post(
-            createUrl,
-            { name },
-            {
-                // Stay on the post Edit screen with all in-progress changes
-                // intact. The store action returns `back()` so the response
-                // re-renders this same page with refreshed taxonomy props.
-                preserveScroll: true,
-                preserveState: true,
-                onSuccess: () => {
-                    setDraftName('');
-                    setCreating(false);
-                },
-                onFinish: () => setSubmitting(false),
-            },
-        );
-    }
-
-    return (
-        <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-                <div className="text-xs font-semibold tracking-wide text-base-content/65 uppercase">
-                    {label}
-                </div>
-                {!creating && (
-                    <button
-                        type="button"
-                        onClick={() => setCreating(true)}
-                        className="text-[11px] font-semibold text-primary hover:underline"
-                    >
-                        + {createLabel}
-                    </button>
-                )}
-            </div>
-            {options.length === 0 ? (
-                <PlaceholderPanel label={emptyLabel} hint={emptyHint} />
-            ) : (
-                <div className="flex flex-wrap gap-1.5">
-                    {options.map((o) => {
-                        const active = selected.includes(o.value);
-                        return (
-                            <button
-                                key={o.value}
-                                type="button"
-                                onClick={() => onToggle(o.value)}
-                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
-                                    active
-                                        ? 'border-primary bg-primary text-primary-content'
-                                        : 'border-base-300/60 bg-base-100 text-base-content/65 hover:bg-base-200'
-                                }`}
-                            >
-                                {o.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            )}
-            {creating && (
-                <div className="mt-1 flex flex-col gap-1.5">
-                    <div className="flex items-center gap-1.5">
-                        <input
-                            type="text"
-                            autoFocus
-                            value={draftName}
-                            onChange={(e) => setDraftName(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    // Stop the Enter keypress from bubbling
-                                    // to the outer post-update form.
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    submitCreate();
-                                } else if (e.key === 'Escape') {
-                                    e.preventDefault();
-                                    setCreating(false);
-                                    setDraftName('');
-                                }
-                            }}
-                            placeholder="Name"
-                            className="h-8 flex-1 rounded-md border border-base-300/60 bg-base-100 px-2.5 text-sm outline-none focus:border-primary"
-                        />
-                        <button
-                            type="button"
-                            onClick={submitCreate}
-                            disabled={submitting || draftName.trim() === ''}
-                            className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            Add
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setCreating(false);
-                                setDraftName('');
-                            }}
-                            className="rounded-md border border-base-300/60 bg-base-100 px-2.5 py-1 text-xs font-semibold text-base-content/65 hover:bg-base-200"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                    {createError && (
-                        <div className="text-xs text-error">{createError}</div>
-                    )}
-                </div>
-            )}
-        </div>
     );
 }
 
@@ -554,6 +544,4 @@ function serializeSeo(seo: SeoMetaForm) {
     };
 }
 
-Edit.layout = (page: ReactNode) => (
-    <KeystoneAdminLayout>{page}</KeystoneAdminLayout>
-);
+Edit.layout = (page: ReactNode) => <KeystoneAdminLayout>{page}</KeystoneAdminLayout>;

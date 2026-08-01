@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\ContentModel\ContentTypeController;
 use App\Http\Controllers\Admin\ContentModel\CustomFieldController;
 use App\Http\Controllers\Admin\ContentModel\TaxonomyController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\EditorPreferenceController;
 use App\Http\Controllers\Admin\FormController;
 use App\Http\Controllers\Admin\KeystoneShellController;
 use App\Http\Controllers\Admin\MediaController;
@@ -75,11 +76,39 @@ Route::middleware(['auth', 'verified', 'two-factor', 'two-factor.enroll'])
         Route::delete('dashboards/{slug}/widgets/{id}', [DashboardController::class, 'destroyWidget'])->name('dashboards.widgets.destroy');
 
         Route::middleware('role:admin,site_owner,editor')->group(function (): void {
+            // #189 — Screen Options panel visibility. Lives beside the
+            // editor screens (rather than under `posts`/`pages`) because
+            // preferences are per-user and per-post-type, not per-record.
+            Route::put('editor-preferences/{postType}', [EditorPreferenceController::class, 'update'])
+                ->name('editor-preferences.update');
+            Route::delete('editor-preferences/{postType}', [EditorPreferenceController::class, 'destroy'])
+                ->name('editor-preferences.destroy');
+
             Route::post('pages/{page}/duplicate', [PageController::class, 'duplicate'])->name('pages.duplicate');
-            Route::resource('pages', PageController::class)->except(['show']);
+            // #184 — Add New modal quick-create endpoint. Declared before
+            // the resource so `pages/quick-create` isn't captured as a
+            // `{page}` binding on the show/edit/update routes.
+            Route::post('pages/quick-create', [PageController::class, 'quickCreate'])->name('pages.quick-create');
+            // #185 — Live slug preview for the "auto-derive while draft"
+            // slug field. Declared before the resource for the same
+            // wildcard-collision reason as `quick-create`.
+            //
+            // Throttled: the client debounces at 500ms, so a human typing
+            // stays far under 60/min, but the endpoint is unauthenticated-
+            // adjacent enough (any logged-in editor) and cheap enough to
+            // call in a loop that it needs a ceiling of its own.
+            Route::post('pages/slug-preview', [PageController::class, 'slugPreview'])
+                ->middleware('throttle:60,1')
+                ->name('pages.slug-preview');
+            Route::resource('pages', PageController::class)->except(['show', 'create']);
 
             Route::middleware('feature:blog')->group(function (): void {
                 Route::post('posts/{post}/duplicate', [PostController::class, 'duplicate'])->name('posts.duplicate');
+                Route::post('posts/quick-create', [PostController::class, 'quickCreate'])->name('posts.quick-create');
+                // Throttled for the same reason as the pages preview above.
+                Route::post('posts/slug-preview', [PostController::class, 'slugPreview'])
+                    ->middleware('throttle:60,1')
+                    ->name('posts.slug-preview');
 
                 // Taxonomy resources are registered *before* the catch-all
                 // `posts` resource so `/admin/posts/categories` and
@@ -94,7 +123,7 @@ Route::middleware(['auth', 'verified', 'two-factor', 'two-factor.enroll'])
                     ->names('posts.tags')
                     ->except(['show', 'create']);
 
-                Route::resource('posts', PostController::class)->except(['show']);
+                Route::resource('posts', PostController::class)->except(['show', 'create']);
             });
         });
 
@@ -115,7 +144,7 @@ Route::middleware(['auth', 'verified', 'two-factor', 'two-factor.enroll'])
                 ->where(['contentType' => '[a-z0-9]+(?:-[a-z0-9]+)*'])
                 ->group(function (): void {
                     Route::get('/', [ContentTypeContentController::class, 'index'])->name('index');
-                    Route::get('create', [ContentTypeContentController::class, 'create'])->name('create');
+                    Route::post('quick-create', [ContentTypeContentController::class, 'quickCreate'])->name('quick-create');
                     Route::post('/', [ContentTypeContentController::class, 'store'])->name('store');
                     Route::get('{record}/edit', [ContentTypeContentController::class, 'edit'])
                         ->where('record', '[0-9]+')

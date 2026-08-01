@@ -35,29 +35,36 @@
  * used by DaisyUI's built-in themes so every component gets the same
  * baseline; keep the radius overrides custom to the Keystone look.
  */
+/*
+ * Neutral surfaces use Tailwind's slate ramp (cool gray with a very slight
+ * blue undertone) so brand blues/cyans blend without clashing. Brand colours
+ * (`--color-primary/secondary/accent`) target ≥4.5:1 against `base-100` in
+ * light mode and ≥3:1 in dark mode; the runtime clamp in `AdminTheme.php`
+ * and `useAdminPalette` enforces the same floor for user-picked overrides.
+ */
 @plugin 'daisyui/theme' {
     name: 'keystone-light';
     default: true;
     color-scheme: light;
     --color-base-100: #ffffff;
-    --color-base-200: #f1f5f9;
-    --color-base-300: #cbd5e1;
+    --color-base-200: #f8fafc;
+    --color-base-300: #e2e8f0;
     --color-base-content: #0f172a;
     --color-primary: #0855b1;
     --color-primary-content: #ffffff;
     --color-secondary: #010e54;
     --color-secondary-content: #ffffff;
-    --color-accent: #04d9ff;
-    --color-accent-content: #00022b;
-    --color-neutral: #1e293b;
+    --color-accent: #0891b2;
+    --color-accent-content: #ffffff;
+    --color-neutral: #334155;
     --color-neutral-content: #f8fafc;
-    --color-info: #0ea5e9;
+    --color-info: #0284c7;
     --color-info-content: #ffffff;
-    --color-success: #16a34a;
+    --color-success: #15803d;
     --color-success-content: #ffffff;
-    --color-warning: #f59e0b;
-    --color-warning-content: #1f2937;
-    --color-error: #dc2626;
+    --color-warning: #b45309;
+    --color-warning-content: #ffffff;
+    --color-error: #b91c1c;
     --color-error-content: #ffffff;
     --radius-selector: 0.75rem;
     --radius-field: 0.5rem;
@@ -73,25 +80,25 @@
     name: 'keystone-dark';
     color-scheme: dark;
     --color-base-100: #0f172a;
-    --color-base-200: #0b1220;
-    --color-base-300: #1e293b;
+    --color-base-200: #1e293b;
+    --color-base-300: #334155;
     --color-base-content: #e2e8f0;
-    --color-primary: #3b82f6;
-    --color-primary-content: #ffffff;
-    --color-secondary: #0855b1;
-    --color-secondary-content: #ffffff;
-    --color-accent: #04d9ff;
-    --color-accent-content: #00022b;
-    --color-neutral: #020617;
-    --color-neutral-content: #e2e8f0;
+    --color-primary: #60a5fa;
+    --color-primary-content: #0f172a;
+    --color-secondary: #93c5fd;
+    --color-secondary-content: #0f172a;
+    --color-accent: #22d3ee;
+    --color-accent-content: #0f172a;
+    --color-neutral: #475569;
+    --color-neutral-content: #f8fafc;
     --color-info: #38bdf8;
-    --color-info-content: #00022b;
-    --color-success: #22c55e;
-    --color-success-content: #00022b;
-    --color-warning: #fbbf24;
+    --color-info-content: #0f172a;
+    --color-success: #4ade80;
+    --color-success-content: #0f172a;
+    --color-warning: #facc15;
     --color-warning-content: #1f2937;
     --color-error: #f87171;
-    --color-error-content: #00022b;
+    --color-error-content: #0f172a;
     --radius-selector: 0.75rem;
     --radius-field: 0.5rem;
     --radius-box: 0.875rem;
@@ -124,34 +131,40 @@ body {
     font-family: var(--font-sans);
 }
 
-/* Chrome (sidebar + topbar) palette — light mode uses brand navy, dark mode keeps slate. */
+/*
+ * Chrome (sidebar + topbar) palette — both modes use slate for a neutral
+ * foundation so the user-picked brand colours (stamped as `--chrome-active-fg`
+ * from the accent) stay the visual anchor. Chrome is always dark-on-light-fg
+ * regardless of active theme, so `--chrome-active-fg` must be readable against
+ * a dark surface — `AdminTheme.php` clamps against the dark base for that use.
+ */
 [data-theme='keystone-light'] {
-    --chrome-bg: #010e54;
-    --chrome-fg: rgba(255, 255, 255, 0.92);
-    --chrome-fg-muted: rgba(255, 255, 255, 0.65);
-    --chrome-fg-subtle: rgba(255, 255, 255, 0.45);
+    --chrome-bg: #0f172a;
+    --chrome-fg: rgba(248, 250, 252, 0.92);
+    --chrome-fg-muted: rgba(248, 250, 252, 0.65);
+    --chrome-fg-subtle: rgba(248, 250, 252, 0.62);
     --chrome-border: rgba(255, 255, 255, 0.1);
     --chrome-divider: rgba(255, 255, 255, 0.08);
     --chrome-hover-bg: rgba(255, 255, 255, 0.06);
-    --chrome-active-bg: rgba(4, 217, 255, 0.18);
-    --chrome-active-fg: #04d9ff;
+    --chrome-active-bg: rgba(34, 211, 238, 0.18);
+    --chrome-active-fg: #22d3ee;
     --chrome-input-bg: rgba(255, 255, 255, 0.08);
     --chrome-input-border: rgba(255, 255, 255, 0.12);
     --chrome-badge-bg: rgba(255, 255, 255, 0.1);
-    --chrome-mark-fg: rgba(255, 255, 255, 0.95);
-    --chrome-mark-fg-subtle: rgba(255, 255, 255, 0.55);
+    --chrome-mark-fg: rgba(248, 250, 252, 0.95);
+    --chrome-mark-fg-subtle: rgba(248, 250, 252, 0.55);
 }
 
 [data-theme='keystone-dark'] {
-    --chrome-bg: #0f172a;
+    --chrome-bg: #020617;
     --chrome-fg: rgba(226, 232, 240, 0.92);
     --chrome-fg-muted: rgba(226, 232, 240, 0.65);
-    --chrome-fg-subtle: rgba(226, 232, 240, 0.45);
+    --chrome-fg-subtle: rgba(226, 232, 240, 0.62);
     --chrome-border: rgba(255, 255, 255, 0.06);
     --chrome-divider: rgba(255, 255, 255, 0.05);
     --chrome-hover-bg: rgba(255, 255, 255, 0.04);
-    --chrome-active-bg: rgba(59, 130, 246, 0.18);
-    --chrome-active-fg: #3b82f6;
+    --chrome-active-bg: rgba(34, 211, 238, 0.18);
+    --chrome-active-fg: #22d3ee;
     --chrome-input-bg: rgba(255, 255, 255, 0.04);
     --chrome-input-border: rgba(255, 255, 255, 0.08);
     --chrome-badge-bg: rgba(255, 255, 255, 0.06);

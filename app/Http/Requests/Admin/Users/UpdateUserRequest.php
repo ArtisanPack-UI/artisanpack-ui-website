@@ -6,6 +6,7 @@ namespace App\Http\Requests\Admin\Users;
 
 use App\Http\Requests\Concerns\NormalizesUsername;
 use App\Models\User;
+use App\Support\Media\ImageMediaRule;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -47,11 +48,7 @@ class UpdateUserRequest extends FormRequest
             'display_name'     => ['required', 'string', 'max:255'],
             'email'            => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
             'password'         => ['nullable', 'string', 'min:8'],
-            'profile_photo_id' => [
-                'nullable',
-                'integer',
-                Rule::exists('media', 'id')->where(fn ($q) => $q->where('mime_type', 'like', 'image/%')),
-            ],
+            'profile_photo_id' => ImageMediaRule::nullable(),
             'roles'            => ['array'],
             'roles.*'          => ['string', Rule::in($this->assignableRoleSlugs())],
         ];

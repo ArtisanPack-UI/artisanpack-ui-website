@@ -66,6 +66,7 @@ export default function Index() {
 
                 <Card padded={false}>
                     <DataTable<RoleRow>
+                        resource="roles"
                         columns={[
                             {
                                 key: 'name',

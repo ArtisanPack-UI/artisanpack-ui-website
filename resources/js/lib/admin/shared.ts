@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { applyFilters, doAction } from '@artisanpack-ui/hooks-js';
 import { useTheme } from '@artisanpack-ui/react';
 import type { KeystoneAdminTheme } from '@/types/keystone';
 
@@ -20,7 +21,26 @@ export function useThemeSync(forceTheme: KeystoneAdminTheme['forceTheme'] = 'sys
         }
         document.documentElement.dataset.theme =
             effectiveScheme === 'dark' ? 'keystone-dark' : 'keystone-light';
-    }, [effectiveScheme]);
+        // Fire `keystone.admin.theme.change` after the DOM data-theme has
+        // been stamped so any subscriber that reads computed styles gets
+        // the post-flip snapshot. Args: `(effectiveScheme, { colorScheme,
+        // resolvedColorScheme, forceTheme })` — the extra context lets a
+        // subscriber tell "user toggled" from "system flipped" apart.
+        //
+        // Guarded: `doAction` runs synchronously inside the effect; the
+        // hooks-js primitive does not isolate throws, so an unwrapped
+        // subscriber failure would abort the effect and leave later
+        // effect cleanup / dependent state out of sync.
+        try {
+            doAction('keystone.admin.theme.change', effectiveScheme, {
+                colorScheme,
+                resolvedColorScheme,
+                forceTheme,
+            });
+        } catch (error) {
+            console.error('[keystone] subscriber of keystone.admin.theme.change threw:', error);
+        }
+    }, [effectiveScheme, colorScheme, resolvedColorScheme, forceTheme]);
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -36,25 +56,69 @@ export function useThemeSync(forceTheme: KeystoneAdminTheme['forceTheme'] = 'sys
  * (`--chrome-active-fg`) on the document root. Null values are left untouched
  * so the built-in theme default stands. Admin-only — the public site is themed
  * by the visual site editor.
+ *
+ * The variant pick uses `useTheme()` directly rather than observing
+ * `data-theme` — `useThemeSync` writes that attribute from the same primitive,
+ * so reading the source here avoids a DOM round-trip and keeps the pick in the
+ * same render as `useThemeSync`'s scheme resolution. The sidebar
+ * `--chrome-active-fg` always uses the dark-clamped accent because chrome is
+ * dark-surfaced in BOTH themes (see `[data-theme='keystone-*']` blocks in
+ * `resources/css/app.css`). WCAG contrast enforcement lives on the server
+ * (`AdminTheme::clampForContrast()`); the client trusts the pre-clamped
+ * `*Color` / `*ColorDark` variants it receives via shared props.
  */
 export function useAdminPalette(palette: KeystoneAdminTheme): void {
-    const { primaryColor, secondaryColor, accentColor } = palette;
+    const {
+        primaryColor,
+        primaryColorDark,
+        secondaryColor,
+        secondaryColorDark,
+        accentColor,
+        accentColorDark,
+        forceTheme,
+    } = palette;
+    const { resolvedColorScheme } = useTheme();
+    const effectiveScheme = forceTheme === 'system' ? resolvedColorScheme : forceTheme;
+    const isDark = effectiveScheme === 'dark';
 
     useEffect(() => {
         if (typeof document === 'undefined') {
             return;
         }
 
-        const root = document.documentElement;
-        const overrides: Array<[string, string | null]> = [
-            ['--color-primary', primaryColor],
-            ['--color-secondary', secondaryColor],
-            ['--color-accent', accentColor],
-            ['--chrome-active-fg', accentColor],
-        ];
+        // Plugins can rewrite the CSS custom-property token map before it's
+        // stamped on the document root via `keystone.admin.theme.tokens`.
+        // Args: `(Record<string, string | null>)`; return the (possibly
+        // mutated) map. Setting a property to `null` removes any inline
+        // override. Runs on every palette-change effect fire so filter
+        // callbacks bound after mount pick up on the next brand save.
+        //
+        // Guarded: a throwing subscriber would abort the effect before
+        // the palette gets applied AND before the cleanup registration
+        // below; on unmount the inline overrides would then leak.
+        const baseTokens: Record<string, string | null> = {
+            '--color-primary':    isDark ? primaryColorDark   : primaryColor,
+            '--color-secondary':  isDark ? secondaryColorDark : secondaryColor,
+            '--color-accent':     isDark ? accentColorDark    : accentColor,
+            '--chrome-active-fg': accentColorDark,
+        };
+        let filteredTokens: Record<string, string | null>;
+        try {
+            filteredTokens = applyFilters<Record<string, string | null>>(
+                'keystone.admin.theme.tokens',
+                baseTokens,
+            );
+        } catch (error) {
+            console.error('[keystone] subscriber of keystone.admin.theme.tokens threw:', error);
+            filteredTokens = baseTokens;
+        }
 
-        for (const [property, value] of overrides) {
-            if (value === null) {
+        const root = document.documentElement;
+        const properties = Object.keys(filteredTokens);
+
+        for (const property of properties) {
+            const value = filteredTokens[property];
+            if (null === value) {
                 root.style.removeProperty(property);
             } else {
                 root.style.setProperty(property, value);
@@ -64,11 +128,19 @@ export function useAdminPalette(palette: KeystoneAdminTheme): void {
         // Drop the inline overrides on unmount so the palette can't leak onto
         // non-admin pages — the daisyUI stylesheet values take over again.
         return () => {
-            for (const [property] of overrides) {
+            for (const property of properties) {
                 root.style.removeProperty(property);
             }
         };
-    }, [primaryColor, secondaryColor, accentColor]);
+    }, [
+        primaryColor,
+        primaryColorDark,
+        secondaryColor,
+        secondaryColorDark,
+        accentColor,
+        accentColorDark,
+        isDark,
+    ]);
 }
 
 export interface ChartTheme {

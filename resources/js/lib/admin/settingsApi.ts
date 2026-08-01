@@ -11,7 +11,10 @@
  * Both rely on Sanctum SPA cookie auth, mirroring the media library client.
  */
 
+import { apiFetch } from '@/lib/admin/apiFetch';
 import { finishAdminProgress, startAdminProgress } from '@/lib/admin/progress';
+
+const SETTINGS_API_SOURCE = 'settingsApi';
 
 /** A `{ field: [messages] }` validation bag from a 422 response. */
 export type ValidationErrors = Record<string, string[]>;
@@ -50,7 +53,11 @@ async function ensureCsrfCookie(): Promise<void> {
         return;
     }
     if (!csrfPromise) {
-        csrfPromise = fetch('/sanctum/csrf-cookie', { credentials: 'include' })
+        csrfPromise = apiFetch(
+            '/sanctum/csrf-cookie',
+            { method: 'GET', credentials: 'include' },
+            SETTINGS_API_SOURCE,
+        )
             .then((response) => {
                 if (!response.ok) {
                     throw new SettingsApiError(
@@ -77,16 +84,20 @@ async function putJson<T>(url: string, body: unknown): Promise<T> {
         await ensureCsrfCookie();
 
         const token = getXsrfToken();
-        const response = await fetch(url, {
-            method: 'PUT',
-            credentials: 'include',
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                ...(token ? { 'X-XSRF-TOKEN': token } : {}),
+        const response = await apiFetch(
+            url,
+            {
+                method: 'PUT',
+                credentials: 'include',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'X-XSRF-TOKEN': token } : {}),
+                },
+                body: JSON.stringify(body),
             },
-            body: JSON.stringify(body),
-        });
+            SETTINGS_API_SOURCE,
+        );
 
         if (!response.ok) {
             let message = `Request failed with status ${response.status}`;

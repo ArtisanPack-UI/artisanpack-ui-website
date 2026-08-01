@@ -8,6 +8,7 @@ use App\Exceptions\ThemeInstallException;
 use App\Http\Controllers\Controller;
 use App\Services\ThemeInstaller;
 use App\Services\ThemeSeedApplier;
+use App\Support\Hooks;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Http\RedirectResponse;
@@ -63,11 +64,51 @@ class ThemeController extends Controller
 
     public function activate(string $slug): RedirectResponse
     {
+        // Capture the current active theme BEFORE the switch so the
+        // `activated` hook can hand subscribers the previous slug for
+        // diffing / cache invalidation. Framework's `activateTheme` is
+        // in vendor, so we emit at the controller layer (no service
+        // seam to hook into).
+        $previous     = $this->themeManager->getActiveTheme();
+        $previousSlug = is_array($previous) ? (string) ($previous['slug'] ?? '') : null;
+
         try {
             $this->themeManager->activateTheme($slug);
         } catch (ThemeNotFoundException) {
             return back()->withErrors(['slug' => __('Theme ":slug" not found.', ['slug' => $slug])]);
         }
+
+        // Wrapped: the theme is already active at this point, so a
+        // subscriber exception must not 500 the admin flow.
+        $previousSlugOrNull = '' === $previousSlug ? null : $previousSlug;
+
+        Hooks::safeDoAction(
+            'keystone.admin.themes.activated',
+            $slug,
+            $previousSlugOrNull,
+        );
+
+        // #156 — the surface-agnostic `keystone.themes.activated` fires
+        // from the vendor `ap.cmsFramework.theme.activating/activated`
+        // bridge wired in AppServiceProvider, so it covers installer /
+        // CLI activation paths uniformly. Nothing to emit here.
+
+        // TODO(#20): dispatch PurgeCloudflareCacheJob once that job lands.
+        // For now we rely on ThemeManager::activateTheme to clear the
+        // discovery cache + the view cache. The purge-requested action
+        // fires ahead of that job so a Cloudflare / Fastly / KeyCDN
+        // plugin can subscribe today and drive its own edge purge from
+        // the same event the future job will consume.
+        //
+        // Emitted BEFORE the seed step because the theme is already
+        // active at this point — a partial-success seed failure still
+        // needs an edge purge so visitors don't see the previous theme
+        // out of a warm cache. Wrapped in `safeDoAction` so a broken
+        // subscriber can't turn "theme activated" into a 500.
+        Hooks::safeDoAction('keystone.cache.purgeRequested', [
+            'scope' => 'theme',
+            'tags'  => ['theme:'.$slug],
+        ]);
 
         // Seeding runs after activation succeeds. A throw here would
         // otherwise return a 500 even though the theme is already active —
@@ -82,10 +123,6 @@ class ThemeController extends Controller
                 ->route('admin.site-design.themes.index')
                 ->with('warning', __('Theme activated, but default content could not be seeded.'));
         }
-
-        // TODO(#20): dispatch PurgeCloudflareCacheJob once that job lands.
-        // For now we rely on ThemeManager::activateTheme to clear the
-        // discovery cache + the view cache.
 
         return redirect()
             ->route('admin.site-design.themes.index')

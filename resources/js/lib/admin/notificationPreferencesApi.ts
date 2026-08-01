@@ -7,7 +7,10 @@
  * first write, errors surfaced via {@link NotificationPreferencesApiError}.
  */
 
+import { apiFetch } from '@/lib/admin/apiFetch';
 import { finishAdminProgress, startAdminProgress } from '@/lib/admin/progress';
+
+const NOTIFICATION_PREFERENCES_API_SOURCE = 'notificationPreferencesApi';
 
 /** A single registered notification type paired with the user's preference. */
 export interface NotificationPreferenceType {
@@ -63,7 +66,11 @@ async function ensureCsrfCookie(): Promise<void> {
         return;
     }
     if (!csrfPromise) {
-        csrfPromise = fetch('/sanctum/csrf-cookie', { credentials: 'include' })
+        csrfPromise = apiFetch(
+            '/sanctum/csrf-cookie',
+            { method: 'GET', credentials: 'include' },
+            NOTIFICATION_PREFERENCES_API_SOURCE,
+        )
             .then((response) => {
                 if (!response.ok) {
                     throw new NotificationPreferencesApiError(
@@ -99,16 +106,20 @@ async function requestJson(
         }
         const token = getXsrfToken();
 
-        const response = await fetch(ENDPOINT, {
-            method,
-            credentials: 'include',
-            headers: {
-                Accept: 'application/json',
-                ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
-                ...(token && method !== 'GET' ? { 'X-XSRF-TOKEN': token } : {}),
+        const response = await apiFetch(
+            ENDPOINT,
+            {
+                method,
+                credentials: 'include',
+                headers: {
+                    Accept: 'application/json',
+                    ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
+                    ...(token && method !== 'GET' ? { 'X-XSRF-TOKEN': token } : {}),
+                },
+                ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
             },
-            ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-        });
+            NOTIFICATION_PREFERENCES_API_SOURCE,
+        );
 
         if (!response.ok) {
             throw new NotificationPreferencesApiError(

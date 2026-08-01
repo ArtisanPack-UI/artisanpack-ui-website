@@ -164,9 +164,21 @@ class SeoIntegrationServiceProvider extends ServiceProvider
         $globalDisallow = $hideFromSearch ? ['/'] : ['/admin', '/api'];
         config(['seo.robots.disallow' => $globalDisallow]);
 
+        // #154 — plugin authors can extend / redact the enforced
+        // user-agent list without forking the constant. Fires on every
+        // request regardless of the visibility setting so a subscriber
+        // can inspect the canonical list; the surrounding branch keeps
+        // the empty list from being written when the setting is off.
+        /** @var array<int, string> $userAgents */
+        $userAgents = applyFilters('keystone.seo.aiScrapers.userAgents', self::AI_SCRAPER_USER_AGENTS);
+
         $botRules = [];
         if ($hideFromAiBots) {
-            foreach (self::AI_SCRAPER_USER_AGENTS as $bot) {
+            foreach ($userAgents as $bot) {
+                if (! is_string($bot) || '' === $bot) {
+                    continue;
+                }
+
                 $botRules[$bot] = ['disallow' => ['/']];
             }
         }

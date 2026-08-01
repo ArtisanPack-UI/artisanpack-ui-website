@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-01
+
+### Changed
+
+- **Updated `artisanpack-ui/cms-framework` to 2.7.1**, which continues the fixes
+  to the self-update process. The updater now refuses non-`https` release
+  archives (`cms.updates.allow_insecure_transport`), checks that
+  `composer.lock` is in sync with `composer.json` before invoking composer so a
+  divergence is reported with its real cause, persists a step marker that the
+  new `php artisan update:status` command reports on, and lifts maintenance
+  mode when an update dies mid-flight. Downgrades and rollbacks to externally
+  provenanced archives now require explicit opt-in
+  (`update:perform --allow-downgrade`, `update:rollback --allow-external`).
+
+### Fixed
+
+- **Custom fields can no longer write a model's protected attributes.** Via the
+  framework update, `applyCustomFieldValues()` is now an allowlist keyed to
+  fields registered for the content type, closing case-variant, JSON-path, and
+  unregistered-key bypasses; creating a custom field whose key collides with an
+  existing column or a reserved key is rejected outright. The framework update
+  also resolves an N+1 query on unknown attribute access and stops a cleared
+  column-storage field from resurrecting its default value.
+
+## [0.3.0] - 2026-07-31
+
+### Added
+
+- **Keystone extension surface — a first-class PHP + JS hook system (#125–#156).**
+  Actions and filters now span the admin (menus, users, settings, plugins,
+  themes, updater, content types), auth, comments, caching, SEO, the installer,
+  plugin/theme boot, and public rendering. Blade templates gain hook directives,
+  and the front end exposes a matching JS hook registry wired through
+  `resources/js/ssr.tsx` and the Vite build. Documented in `docs/hooks.md`.
+- **Redesigned post/page/CPT editor.** The edit screen is now a panel-based
+  layout with drag-to-reorder panels, a Screen Options menu, and per-user
+  persistence of panel order and visibility (`UserEditorPreference`, backed by
+  the new `user_editor_preferences` table and `EditorPreferenceController`).
+  Ships Publish, Categories, Tags, Excerpt, Featured Image, and Attributes
+  panels, plus a reusable slug field with live permalink preview.
+- **Draft previews.** `PreviewController` and `PreviewUrl` generate signed
+  preview URLs so unpublished content can be viewed without publishing it.
+- **Scheduled publishing.** The `PublishScheduledContent` console command
+  promotes scheduled posts, pages, and custom content types once their
+  publish date passes.
+- **Add Content modal** for creating content directly from the index screens.
+- Custom content types can now declare their own database tables via
+  `ContentTypeTables` and the `keystone_content_type_tables` table.
+
+### Changed
+
+- **Admin color system rebuilt on a neutral slate base with a WCAG-clamped
+  brand palette.** Brand colors supplied by a site are now clamped to meet
+  contrast requirements before they reach the admin UI, so custom branding can
+  no longer produce unreadable text.
+- Bumped `artisanpack-ui/cms-framework` from `^2.5.3` to `^2.7.0`.
+
+### Fixed
+
+- Resolved all 39 code-review findings raised against the Editor 1.1–1.11 work,
+  covering the post, page, and dynamic-content edit and index screens, admin and
+  web routing, and media attachment handling.
+- Image uploads are now validated through a shared `ImageMediaRule`.
+- Public visibility of content is centralized in `PublicVisibility`, keeping
+  the blog, public pages, and permalink handling consistent.
+
 ## [0.2.5] - 2026-07-27
 
 ### Changed

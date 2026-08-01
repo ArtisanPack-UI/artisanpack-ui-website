@@ -13,12 +13,19 @@ use App\SiteEditor\KeystoneResourceResolver;
 use App\SiteEditor\KeystoneSiteEditorGate;
 use App\Support\ContentModel\SpecializedContentTypes;
 use App\Support\EnvWriter;
+use App\Support\HookAliases;
+use App\Support\Hooks;
+use App\Support\Plugins\KeystonePluginManager;
 use App\Support\SiteBranding;
+use App\Support\Themes\ThemeActivationBridge;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\Forms\Models\Form as PackageForm;
 use ArtisanPackUI\MediaLibrary\Http\Requests\MediaStoreRequest as PackageMediaStoreRequest;
 use ArtisanPackUI\VisualEditor\Resources\ResourceResolver;
 use ArtisanPackUI\VisualEditor\SiteEditor\Gates\SiteEditorAccessGate;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
@@ -56,6 +63,13 @@ class AppServiceProvider extends ServiceProvider
         // Bound as scoped so a config override in tests picks up on the
         // next resolve without leaking across requests.
         $this->app->scoped(PluginUpdateUrlGuard::class, static fn () => PluginUpdateUrlGuard::fromConfig());
+
+        // #156 — swap the framework PluginManager for the Keystone
+        // subclass so `loadActivePlugins()` fires `keystone.plugins.booting`
+        // per plugin. `extend` wraps whatever binding is currently on the
+        // container, so this composes cleanly with the vendor package's
+        // own singleton registration regardless of provider order.
+        $this->app->extend(PluginManager::class, static fn (): KeystonePluginManager => new KeystonePluginManager);
     }
 
     /**
@@ -63,6 +77,24 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Register Keystone hook aliases before any subscriber gets a
+        // chance to bind. Empty map today; ready for the first rename.
+        HookAliases::register();
+
+        $this->registerScheduledPublishing();
+
+        // #156 — the aggregate "all plugins booted" signal fires once
+        // the framework has finished registering every plugin service
+        // provider. `booted()` runs at the very end of the container
+        // boot cycle, after every provider's own `boot()` — so
+        // subscribers see the fully-wired container. Wrapped in
+        // `safeDoAction` because Laravel propagates callback throws
+        // through `fireCallbacks`; without the guard, one broken
+        // subscriber would 500 every request or fail app boot outright.
+        $this->app->booted(static function (): void {
+            Hooks::safeDoAction('keystone.plugins.booted');
+        });
+
         Gate::before(function (User $user, string $ability, array $arguments = []): ?bool {
             // Defer to DynamicContentEditorModelPolicy for dynamic-
             // content-type authz so the `show_in_admin=false` and
@@ -119,6 +151,51 @@ class AppServiceProvider extends ServiceProvider
         // browser-form UX (POST → 303 → GET with a flash message)
         // instead of landing on raw JSON. The block renderer reads
         // this filter via `applyFilters('comments.form.action', ...)`.
+        if (function_exists('addAction')) {
+            // #131 — Bridge vendor plugin-lifecycle hooks to the
+            // Keystone-branded equivalents so subscribers can hook a
+            // single canonical name regardless of whether the mutation
+            // originated in the admin controller or a CLI/artisan path.
+            // The controller intentionally does NOT re-emit these
+            // events — the bridge covers both surfaces uniformly.
+            addAction('ap.cmsFramework.plugin.installed', function ($slug, $plugin = null): void {
+                doAction('keystone.admin.plugins.installed', $slug, $plugin);
+            });
+            addAction('ap.cmsFramework.plugin.activated', function ($slug, $plugin = null): void {
+                doAction('keystone.admin.plugins.activated', $slug, $plugin);
+            });
+            addAction('ap.cmsFramework.plugin.deactivated', function ($slug): void {
+                doAction('keystone.admin.plugins.deactivated', $slug);
+            });
+            addAction('ap.cmsFramework.plugin.updated', function ($slug, $newVersion = null): void {
+                doAction('keystone.admin.plugins.updated', $slug, $newVersion);
+            });
+            addAction('ap.cmsFramework.plugin.deleted', function ($slug): void {
+                doAction('keystone.admin.plugins.deleted', $slug);
+            });
+
+            // #132 — CLI/programmatic parity for theme installs. The
+            // Keystone admin path goes through {@see ThemeInstaller},
+            // which never calls vendor's `installTheme()`, so the two
+            // emit sites don't overlap.
+            addAction('ap.cmsFramework.theme.installed', function ($slug, $manifest = null): void {
+                doAction('keystone.admin.themes.installed', $slug, $manifest);
+            });
+
+            // #156 (post-review fix) — bridge vendor theme activation
+            // so `keystone.themes.activated` fires for every surface
+            // (admin controller, installer, CLI, programmatic). The
+            // pre-switch `activating` fire snapshots the currently-
+            // active theme so the post-switch payload can hand
+            // subscribers `{previousSlug, newSlug}`.
+            addAction('ap.cmsFramework.theme.activating', function ($slug = null, $theme = null): void {
+                ThemeActivationBridge::onActivating(app(ThemeManager::class));
+            });
+            addAction('ap.cmsFramework.theme.activated', function ($slug, $theme = null): void {
+                ThemeActivationBridge::onActivated((string) $slug);
+            });
+        }
+
         if (function_exists('addFilter')) {
             // #111 — register every Keystone-persisted content type in
             // the visual-editor resource map so `/visual-editor/api/
@@ -128,7 +205,7 @@ class AppServiceProvider extends ServiceProvider
             // classes registered by the framework — never overwrite
             // those. Wrapped in try/catch so a missing content_types
             // table (fresh install pre-migration) doesn't trip boot.
-            addFilter('ap.visual-editor.resources', function (array $map): array {
+            addFilter('ap.visualEditor.resources', function (array $map): array {
                 try {
                     $manager = app(ContentTypeManager::class);
                 } catch (Throwable) {
@@ -179,7 +256,7 @@ class AppServiceProvider extends ServiceProvider
             // UI for approval.
             if (app()->environment('local')) {
                 addFilter(
-                    'comments.store.defaultStatus',
+                    'ap.cmsFramework.comments.store.defaultStatus',
                     fn () => \ArtisanPackUI\CMSFramework\Modules\Blog\Models\Comment::STATUS_APPROVED,
                 );
             }
@@ -193,7 +270,7 @@ class AppServiceProvider extends ServiceProvider
             // preserving the resolver's own `redirect_to` query param so
             // the post-logout redirect stays on the originating page.
             addFilter(
-                'ap.visual-editor.loginout.envelope',
+                'ap.visualEditor.loginout.envelope',
                 function (array $envelope): array {
                     if (true !== ($envelope['isUserLoggedIn'] ?? false)) {
                         return $envelope;
@@ -249,6 +326,38 @@ class AppServiceProvider extends ServiceProvider
             }
 
             return PackageForm::query()->where('slug', $value)->firstOrFail();
+        });
+    }
+
+    /**
+     * Register the every-minute scheduled-publish sweep.
+     *
+     * A minute is the finest granularity the editor's datetime picker
+     * offers, so anything coarser would let an author pick a time the
+     * worker can't honour. `withoutOverlapping()` keeps a long backlog on
+     * a slow database from stacking runs; `onOneServer()` matches the
+     * pattern the update-check schedule already uses.
+     *
+     * The 5-minute lock expiry matters more than it looks. Laravel's
+     * default is 24 hours, so a run killed mid-flight (deploy, OOM, host
+     * reboot) would leave the lock held and scheduled publishing silently
+     * dead for a day — the exact failure this command exists to prevent,
+     * reintroduced one level up. Five minutes is comfortably longer than
+     * a sweep over any realistic backlog and short enough that a crash
+     * costs a handful of minutes, not a news cycle.
+     *
+     * Registered via `callAfterResolving` rather than a `routes/console.php`
+     * entry so the binding only materializes when something actually
+     * resolves the scheduler — the same shape as UpdatesServiceProvider.
+     */
+    private function registerScheduledPublishing(): void
+    {
+        $this->callAfterResolving(Schedule::class, static function (Schedule $schedule): void {
+            $schedule->command('keystone:publish-scheduled')
+                ->everyMinute()
+                ->withoutOverlapping(5)
+                ->onOneServer()
+                ->name('keystone:publish-scheduled');
         });
     }
 }

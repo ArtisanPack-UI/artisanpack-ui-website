@@ -1,4 +1,5 @@
 import type { FormDataConvertible } from '@inertiajs/core';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import type { CustomFieldRecord } from './types';
 
 /**
@@ -24,7 +25,18 @@ export function mergeCustomFieldValues(
             : field.value;
         merged[field.key] = coerceForFormData(raw);
     }
-    return merged;
+    // `keystone.admin.customFields.merge` — filters the merged
+    // custom-field payload right before it's handed to Inertia. Plugins
+    // can inject synthetic fields (a computed value from a sibling
+    // field), redact fields the current user can't write, or normalize
+    // shapes. Args: `(payload, { fields, dirty })`; the return value
+    // must remain a `Record<string, FormDataConvertible>` — coerce
+    // anything you add via {@link coerceForFormData} at the call site.
+    return applyFilters<Record<string, FormDataConvertible>>(
+        'keystone.admin.customFields.merge',
+        merged,
+        { fields, dirty },
+    );
 }
 
 function coerceForFormData(value: unknown): FormDataConvertible {

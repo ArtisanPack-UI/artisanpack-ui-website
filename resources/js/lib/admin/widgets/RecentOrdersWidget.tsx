@@ -17,6 +17,7 @@ const ORDER_STATUS_TONE: Record<string, Tone> = {
 export function RecentOrdersWidget({ data }: WidgetComponentProps<RecentOrdersData>) {
     return (
         <DataTable<OrderRow>
+            resource="widgets.recentOrders"
             columns={[
                 { key: 'id', label: 'Order' },
                 { key: 'customer', label: 'Customer' },

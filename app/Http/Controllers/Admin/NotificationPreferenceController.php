@@ -64,6 +64,8 @@ class NotificationPreferenceController extends Controller
         $registeredKeys = array_keys($this->notificationManager->getRegisteredNotifications());
         $user           = $request->user();
 
+        $touchedKeys = [];
+
         foreach ($validated['preferences'] as $preference) {
             if (! in_array($preference['notification_type'], $registeredKeys, true)) {
                 continue;
@@ -79,7 +81,22 @@ class NotificationPreferenceController extends Controller
                     'email_enabled' => (bool) $preference['email_enabled'],
                 ],
             );
+
+            $touchedKeys[] = (string) $preference['notification_type'];
         }
+
+        // Per-user preferences don't produce a global "prior" value cheap
+        // to diff, so we pass touched keys instead — subscribers can
+        // re-read the rows for the calling user if they need the values.
+        // `userId` is included so a subscriber knows *whose* rows to read
+        // without depending on the request context.
+        $payload = [
+            'panel'  => 'notificationPreferences',
+            'userId' => (int) $user->id,
+            'diff'   => ['keys' => $touchedKeys],
+        ];
+        doAction('keystone.admin.settings.notificationPreferences.saved', $payload);
+        doAction('keystone.admin.settings.saved', $payload);
 
         return response()->json($this->buildPayload($user));
     }

@@ -84,6 +84,16 @@ class ThemeSeedApplier
 
             $this->settings->updateSetting($key, true);
 
+            // Emit a summary of what was seeded so subscribers can react
+            // without re-reading the manifest. Counts rather than full
+            // payloads keep the fire cheap.
+            doAction('keystone.admin.themes.seeded', $slug, [
+                'settings'      => count((array) ($seed['settings'] ?? [])),
+                'templateParts' => count((array) ($seed['templateParts'] ?? [])),
+                'menus'         => count((array) ($seed['menus'] ?? [])),
+                'pages'         => count((array) ($seed['pages'] ?? [])),
+            ]);
+
             return true;
         });
     }

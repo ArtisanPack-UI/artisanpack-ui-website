@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import CollapsibleCard from '@/components/admin/CollapsibleCard';
 import FeaturedImagePicker, {
     type FeaturedImageRecord,
@@ -43,6 +44,8 @@ interface SeoMetaCardProps {
     errors?: Record<string, string>;
     /** Distinguish picker instances when multiple are on the same screen. */
     contextPrefix?: string;
+    /** Resource slug threaded into the OG/Twitter picker hooks. */
+    resource?: string;
 }
 
 const TWITTER_CARDS: Array<{ value: SeoMetaForm['twitter_card']; label: string }> = [
@@ -87,10 +90,15 @@ export default function SeoMetaCard({
     onChange,
     errors = {},
     contextPrefix = 'seo',
+    resource,
 }: SeoMetaCardProps) {
     function set<K extends keyof SeoMetaForm>(key: K, next: SeoMetaForm[K]) {
         onChange({ ...value, [key]: next });
     }
+
+    // Namespaces the sub-section heading ids. `contextPrefix` is already
+    // per-record (`post-42`), so two cards on one screen can't collide.
+    const idPrefix = `${contextPrefix}-seo`;
 
     const titleLen = value.meta_title.length;
     const descLen = value.meta_description.length;
@@ -99,15 +107,60 @@ export default function SeoMetaCard({
         ? truncate(value.meta_title, 48)
         : 'Defaults from title & excerpt';
 
+    // `keystone.admin.seo.snippet.preview` — filters a search-snippet
+    // preview node rendered at the top of the SEO card. Plugins that
+    // ship a live Google SERP preview (or a Twitter card mock) mount
+    // here. Starts as `null` so the card renders unchanged out of the
+    // box. Args: `(ReactNode, { value, contextPrefix })`.
+    const snippetPreview = applyFilters<ReactNode>(
+        'keystone.admin.seo.snippet.preview',
+        null,
+        { value, contextPrefix },
+    );
+
+    // `keystone.admin.seo.suggestions` — filters a suggestions node
+    // (readability score, keyword density, missing meta description
+    // callouts) rendered between the search-appearance section and the
+    // social-sharing section. Starts as `null`. Args:
+    // `(ReactNode, { value, errors })`.
+    const suggestions = applyFilters<ReactNode>(
+        'keystone.admin.seo.suggestions',
+        null,
+        { value, errors },
+    );
+
+    // `keystone.admin.seo.fields` — filters a slot node rendered after
+    // the built-in schema/sitemap section so plugins can add extra SEO
+    // fields (Bing verification, LinkedIn preview overrides) without
+    // forking the card. Starts as `null`. Args:
+    // `(ReactNode, { value, onChange, errors, contextPrefix })`.
+    const extraFields = applyFilters<ReactNode>(
+        'keystone.admin.seo.fields',
+        null,
+        { value, onChange, errors, contextPrefix },
+    );
+
     return (
         <CollapsibleCard title="SEO" summary={summary}>
-            <div className="flex flex-col gap-6">
-                <section className="flex flex-col gap-4">
+            {/*
+             * `@container` scopes the `@lg:` / `@2xl:` breakpoints below
+             * to the card's own width, not the viewport. That way the
+             * card collapses to a single column when it lives in the
+             * ~320px editor sidebar and expands to 2 / 3 columns when
+             * the layout drops it into the wider main column.
+             */}
+            <div className="@container flex flex-col gap-6">
+                {snippetPreview}
+                <section
+                    aria-labelledby={`${idPrefix}-search-appearance`}
+                    className="flex flex-col gap-4"
+                >
                     <SectionHeader
+                        headingId={`${idPrefix}-search-appearance`}
                         title="Search appearance"
                         description="Override the title and description Google + Bing show in results."
                     />
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 @lg:grid-cols-2">
                         <SeoField
                             label="Meta title"
                             hint={`${titleLen}/60 characters`}
@@ -138,7 +191,7 @@ export default function SeoMetaCard({
                                 />
                             }
                         />
-                        <div className="md:col-span-2">
+                        <div className="@lg:col-span-2">
                             <SeoField
                                 label="Meta description"
                                 hint={`${descLen}/160 characters`}
@@ -193,12 +246,18 @@ export default function SeoMetaCard({
                     </div>
                 </section>
 
-                <section className="flex flex-col gap-4">
+                {suggestions}
+
+                <section
+                    aria-labelledby={`${idPrefix}-social-sharing`}
+                    className="flex flex-col gap-4"
+                >
                     <SectionHeader
+                        headingId={`${idPrefix}-social-sharing`}
                         title="Social sharing"
                         description="Open Graph + Twitter Card overrides. Defaults fall back to the search appearance fields."
                     />
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 @lg:grid-cols-2">
                         <SeoField
                             label="OG title"
                             error={errors['seo.og_title']}
@@ -261,6 +320,7 @@ export default function SeoMetaCard({
                                     value={value.og_image}
                                     onChange={(picked) => set('og_image', picked)}
                                     context={`${contextPrefix}-og-image`}
+                                    resource={resource}
                                     placeholderLabel="+ Choose OG image"
                                     modalTitle="Choose an Open Graph image"
                                 />
@@ -274,6 +334,7 @@ export default function SeoMetaCard({
                                     value={value.twitter_image}
                                     onChange={(picked) => set('twitter_image', picked)}
                                     context={`${contextPrefix}-twitter-image`}
+                                    resource={resource}
                                     placeholderLabel="+ Choose Twitter image"
                                     modalTitle="Choose a Twitter Card image"
                                 />
@@ -304,12 +365,16 @@ export default function SeoMetaCard({
                     </div>
                 </section>
 
-                <section className="flex flex-col gap-4">
+                <section
+                    aria-labelledby={`${idPrefix}-schema-sitemap`}
+                    className="flex flex-col gap-4"
+                >
                     <SectionHeader
+                        headingId={`${idPrefix}-schema-sitemap`}
                         title="Schema & sitemap"
                         description="Override the structured-data type and tune sitemap presence for this URL."
                     />
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 @2xl:grid-cols-3">
                         <SeoField
                             label="Schema type"
                             error={errors['seo.schema_type']}
@@ -382,7 +447,7 @@ export default function SeoMetaCard({
                                 />
                             }
                         />
-                        <div className="md:col-span-3">
+                        <div className="@2xl:col-span-3">
                             <Toggle
                                 checked={value.exclude_from_sitemap}
                                 label="Exclude from sitemap"
@@ -392,30 +457,52 @@ export default function SeoMetaCard({
                         </div>
                     </div>
                 </section>
+
+                {extraFields}
             </div>
         </CollapsibleCard>
     );
 }
 
+/*
+ * `focus-visible:ring-*` alongside `focus:border-primary`: the border
+ * recolour alone is a 1px hue shift, which is not a reliable focus
+ * indicator and doesn't match the ring every other input in the editor
+ * draws (WCAG 2.4.7).
+ */
 const textInputClass =
-    'h-9 w-full rounded-md border border-base-300/60 bg-base-100 px-3 text-sm outline-none focus:border-primary';
+    'h-9 w-full rounded-md border border-base-300/60 bg-base-100 px-3 text-sm outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/40';
 
 const textareaClass =
-    'w-full rounded-md border border-base-300/60 bg-base-100 px-3 py-2 text-sm outline-none focus:border-primary';
+    'w-full rounded-md border border-base-300/60 bg-base-100 px-3 py-2 text-sm outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/40';
 
 const selectClass = textInputClass;
 
+/**
+ * Heading for one of the card's sub-sections.
+ *
+ * A real `<h3>` rather than a styled `<div>`: the card's own `<h2>` is the
+ * only entry this panel had in a screen reader's heading list, so
+ * "Search appearance", "Social sharing", and "Schema & sitemap" — the
+ * structure a sighted user navigates by — were invisible to anyone using
+ * headings to move around (WCAG 1.3.1). `headingId` lets the owning
+ * `<section>` point `aria-labelledby` at it.
+ */
 function SectionHeader({
     title,
     description,
+    headingId,
 }: {
     title: string;
     description: string;
+    headingId?: string;
 }) {
     return (
         <div className="border-b border-base-200/70 pb-2">
-            <div className="text-sm font-semibold text-base-content/85">{title}</div>
-            <div className="text-xs text-base-content/55">{description}</div>
+            <h3 id={headingId} className="text-sm font-semibold text-base-content/85">
+                {title}
+            </h3>
+            <div className="text-xs text-base-content/70">{description}</div>
         </div>
     );
 }
@@ -436,7 +523,7 @@ function SeoField({
             <span className="font-semibold text-base-content/85">{label}</span>
             {input}
             {hint && !error && (
-                <span className="text-xs text-base-content/55">{hint}</span>
+                <span className="text-xs text-base-content/70">{hint}</span>
             )}
             {error && <span className="text-xs text-error">{error}</span>}
         </label>
@@ -465,7 +552,7 @@ function Toggle({
             <span className="flex flex-col">
                 <span className="font-medium text-base-content/85">{label}</span>
                 {description && (
-                    <span className="text-xs text-base-content/55">
+                    <span className="text-xs text-base-content/70">
                         {description}
                     </span>
                 )}

@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Support\Content\PublicVisibility;
 use App\Support\PermalinkStructure;
 use App\Support\SiteBranding;
-use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\GlobalStyles;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplatePartResolver;
@@ -59,10 +59,7 @@ class PublicPageController extends Controller
             throw new NotFoundHttpException;
         }
 
-        $page = Page::query()
-            ->where('slug', $slug)
-            ->where('status', ContentStatus::Published)
-            ->first();
+        $page = PublicVisibility::pages(Page::query()->where('slug', $slug))->first();
 
         if (null !== $page) {
             return $this->renderPage($page);
@@ -83,7 +80,19 @@ class PublicPageController extends Controller
         throw new NotFoundHttpException;
     }
 
-    private function renderPage(Page $page): View
+    /**
+     * Render a resolved page through the active theme. Public so the
+     * preview route (see {@see PreviewController}) can render draft
+     * and scheduled pages through the same pipeline the public route
+     * uses.
+     *
+     * `$isPreview` suppresses the `keystone.public.render.page.*`
+     * actions — subscribers to those hooks are wired for PUBLIC page
+     * loads (analytics beacons, cache warm, view counters); firing
+     * them on preview clicks would double-count draft views and warm
+     * the edge with unpublished HTML.
+     */
+    public function renderPage(Page $page, bool $isPreview = false): View
     {
         // Eager-load the relations the SEO Blade components read in the
         // theme head. `seoMeta` drives meta/OG/Twitter resolution;
@@ -101,14 +110,32 @@ class PublicPageController extends Controller
 
         $activeSlug = $this->themeManager->getActiveTheme()['slug'] ?? null;
 
-        return view($template, [
+        if (! $isPreview) {
+            doAction('keystone.public.render.page.before', $page);
+        }
+
+        $data = [
             'page'         => $page,
             'activeTheme'  => $activeSlug,
             'headerBlocks' => $this->resolvePartBlocks('header'),
             'footerBlocks' => $this->resolvePartBlocks('footer'),
             'themeJson'    => $this->readThemeJson($activeSlug),
             'siteIcon'     => SiteBranding::icon(),
+        ];
+
+        /** @var array<string, mixed> $data */
+        $data = applyFilters('keystone.public.render.viewData', $data, [
+            'surface' => 'page',
+            'page'    => $page,
         ]);
+
+        $view = view($template, $data);
+
+        if (! $isPreview) {
+            doAction('keystone.public.render.page.after', $page, $view);
+        }
+
+        return $view;
     }
 
     /**
@@ -250,10 +277,9 @@ class PublicPageController extends Controller
         $homepageId = apGetSetting('site.homepageId');
 
         if (is_numeric($homepageId)) {
-            $page = Page::query()
-                ->whereKey((int) $homepageId)
-                ->where('status', ContentStatus::Published)
-                ->first();
+            $page = PublicVisibility::pages(
+                Page::query()->whereKey((int) $homepageId),
+            )->first();
 
             if (null !== $page) {
                 return $page;
@@ -262,9 +288,8 @@ class PublicPageController extends Controller
 
         // Fallback: slug `home`. Keeps front-end working when settings
         // haven't been seeded yet (fresh install before activate).
-        return Page::query()
-            ->where('slug', 'home')
-            ->where('status', ContentStatus::Published)
-            ->first();
+        return PublicVisibility::pages(
+            Page::query()->where('slug', 'home'),
+        )->first();
     }
 }

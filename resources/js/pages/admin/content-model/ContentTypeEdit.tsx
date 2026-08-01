@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactNode } from 'react';
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Card, PageHeader } from '@/components/admin/keystone';
 import { update as contentTypeUpdate } from '@/routes/admin/content-model/content-types';
@@ -103,6 +104,15 @@ export default function ContentTypeEdit() {
                         <BoolField label="Show in admin" value={form.data.show_in_admin} onChange={(v) => form.setData('show_in_admin', v)} />
                         <BoolField label="Hierarchical" value={form.data.hierarchical} onChange={(v) => form.setData('hierarchical', v)} />
                         <BoolField label="Has archive" value={form.data.has_archive} onChange={(v) => form.setData('has_archive', v)} />
+                        {applyFilters<ReactNode>(
+                            // Same slot as the create form; `mode: 'edit'`
+                            // lets a subscriber render different controls
+                            // during edit (e.g. show a "Rebuild indexes"
+                            // button that only makes sense post-create).
+                            'keystone.admin.contentTypes.form.sections',
+                            null,
+                            { form, mode: 'edit', contentType },
+                        )}
                         <div className="md:col-span-2 flex items-center gap-2">
                             <button type="submit" disabled={form.processing} className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:opacity-50">
                                 {form.processing ? 'Saving…' : 'Save changes'}

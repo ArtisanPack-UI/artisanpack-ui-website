@@ -17,7 +17,7 @@ use Throwable;
 /**
  * Builds the Keystone admin sidebar menu as a plain data structure suitable
  * for the Inertia shared prop. The React admin layout renders it verbatim,
- * so a plugin subscribing to `ap.admin.menu` can inject sidebar entries
+ * so a plugin subscribing to `ap.cmsFramework.admin.menu` can inject sidebar entries
  * without touching {@see \App\Http\Middleware\HandleInertiaRequests} or the
  * React nav component.
  *
@@ -83,7 +83,7 @@ class AdminMenuBuilder
 
         if (function_exists('applyFilters')) {
             /** @var mixed $filtered */
-            $filtered = applyFilters('ap.admin.menu', $groups, $context);
+            $filtered = applyFilters('ap.cmsFramework.admin.menu', $groups, $context);
             if (is_array($filtered)) {
                 $groups = $filtered;
             }
@@ -145,7 +145,10 @@ class AdminMenuBuilder
                 'url'      => $pagesIndex,
                 'children' => [
                     ['key' => 'pages-all', 'label' => 'All Pages', 'url' => $pagesIndex],
-                    ['key' => 'pages-new', 'label' => 'Add Page', 'url' => $this->route('admin.pages.create')],
+                    // #184 — "Add Page" opens the Add-New modal via the
+                    // Index page's `?new=1` query flag; the killed
+                    // `admin.pages.create` auto-draft route is gone.
+                    ['key' => 'pages-new', 'label' => 'Add Page', 'url' => $this->route('admin.pages.index', ['new' => 1])],
                 ],
             ],
         ];
@@ -158,7 +161,7 @@ class AdminMenuBuilder
                 'url'      => $postsIndex,
                 'children' => [
                     ['key' => 'posts-all', 'label' => 'All Posts', 'url' => $postsIndex],
-                    ['key' => 'posts-new', 'label' => 'Add Post', 'url' => $this->route('admin.posts.create')],
+                    ['key' => 'posts-new', 'label' => 'Add Post', 'url' => $this->route('admin.posts.index', ['new' => 1])],
                     ['key' => 'posts-categories', 'label' => 'Categories', 'url' => $this->route('admin.posts.categories.index')],
                     ['key' => 'posts-tags', 'label' => 'Tags', 'url' => $this->route('admin.posts.tags.index')],
                 ],
@@ -597,10 +600,13 @@ class AdminMenuBuilder
         }
     }
 
-    private function route(string $name): string
+    /**
+     * @param  array<string, mixed>  $parameters
+     */
+    private function route(string $name, array $parameters = []): string
     {
         try {
-            return $this->urlGenerator->route($name, [], false);
+            return $this->urlGenerator->route($name, $parameters, false);
         } catch (Throwable) {
             return '#';
         }
@@ -649,7 +655,10 @@ class AdminMenuBuilder
             $label = is_array($entry) ? (string) ($entry['name'] ?? $entrySlug) : $entrySlug;
             try {
                 $indexUrl  = $this->urlGenerator->route('admin.content.index', ['contentType' => $entrySlug], false);
-                $createUrl = $this->urlGenerator->route('admin.content.create', ['contentType' => $entrySlug], false);
+                // #184 — "Add …" opens the Add-New modal via the
+                // Index page's `?new=1` query flag; the killed
+                // `admin.content.create` auto-draft route is gone.
+                $createUrl = $this->urlGenerator->route('admin.content.index', ['contentType' => $entrySlug, 'new' => 1], false);
             } catch (Throwable) {
                 continue;
             }

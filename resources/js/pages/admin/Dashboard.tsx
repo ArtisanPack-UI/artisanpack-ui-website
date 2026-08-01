@@ -1,5 +1,7 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Head, router } from '@inertiajs/react';
+import { applyFilters, doAction } from '@artisanpack-ui/hooks-js';
+import { keystoneConfirm } from '@/lib/admin/confirm';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { PageHeader } from '@/components/admin/keystone';
 import { DashboardGrid, renderableWidgets } from '@/components/admin/dashboard/DashboardGrid';
@@ -27,14 +29,53 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ dashboards, current, available_widgets, starters }: DashboardProps) {
-    // `current.widgets` may contain orphan rows whose `type` is no longer in
+    // Fire `keystone.admin.dashboard.mount` once per mounted Dashboard so
+    // analytics / usage-tracking plugins can log dashboard views. The
+    // effect deps intentionally cover `current.id` so switching
+    // dashboards re-fires. Args: `({ dashboardId, dashboardSlug })`.
+    useEffect(() => {
+        doAction('keystone.admin.dashboard.mount', {
+            dashboardId:   current.id,
+            dashboardSlug: current.slug,
+        });
+    }, [current.id, current.slug]);
+
+    // Filter the available-widgets catalog and the persisted-widget list
+    // before either is consumed downstream. `.widgets.available` lets a
+    // plugin add, remove, or rewrite catalog entries (e.g. hide widgets
+    // behind a feature flag or inject a plugin-owned widget without
+    // touching the server manifest); `.widgets.list` rewrites the actual
+    // widget instances rendered on this dashboard (e.g. force-collapse an
+    // instance by returning it with `data.visible = false`, or drop a
+    // stale row a plugin migrated away from). Args are
+    // `(AvailableWidgets, { dashboardId, dashboardSlug })` and
+    // `(Widget[], { dashboardId, dashboardSlug })` respectively.
+    const filteredAvailableWidgets = useMemo(
+        () => applyFilters<AvailableWidgets>(
+            'keystone.admin.dashboard.widgets.available',
+            available_widgets,
+            { dashboardId: current.id, dashboardSlug: current.slug },
+        ),
+        [available_widgets, current.id, current.slug],
+    );
+
+    const filteredWidgets = useMemo(
+        () => applyFilters<Widget[]>(
+            'keystone.admin.dashboard.widgets.list',
+            current.widgets,
+            { dashboardId: current.id, dashboardSlug: current.slug },
+        ),
+        [current.widgets, current.id, current.slug],
+    );
+
+    // `filteredWidgets` may contain orphan rows whose `type` is no longer in
     // the catalog or whose `component` isn't registered. `DashboardGrid`
     // silently drops them, so we have to derive emptiness from what would
     // actually render, not the raw count, or the user lands on a blank page
     // instead of the empty-state placeholder.
     const serverWidgets = useMemo(
-        () => renderableWidgets(current.widgets, available_widgets),
-        [current.widgets, available_widgets],
+        () => renderableWidgets(filteredWidgets, filteredAvailableWidgets),
+        [filteredWidgets, filteredAvailableWidgets],
     );
 
     // Local copy so drag-drop can apply an optimistic order before the
@@ -64,14 +105,14 @@ export default function Dashboard({ dashboards, current, available_widgets, star
     // The editing widget references catalog data via its `type`. If the widget
     // (or its catalog entry) disappears mid-edit — e.g. the server stripped a
     // capability — close the modal rather than render against undefined.
-    const editingCatalog = editingWidget ? available_widgets[editingWidget.type] : undefined;
+    const editingCatalog = editingWidget ? filteredAvailableWidgets[editingWidget.type] : undefined;
 
     const layoutWidget = useMemo(
         () => orderedWidgets.find((widget) => widget.id === layoutWidgetId) ?? null,
         [orderedWidgets, layoutWidgetId],
     );
 
-    const layoutCatalog = layoutWidget ? available_widgets[layoutWidget.type] : undefined;
+    const layoutCatalog = layoutWidget ? filteredAvailableWidgets[layoutWidget.type] : undefined;
 
     // Monotonic counter so an older PATCH's onError can't revert state that a
     // newer PATCH has already (successfully) advanced. Tracks the most recently
@@ -79,11 +120,26 @@ export default function Dashboard({ dashboards, current, available_widgets, star
     const latestReorderRequestId = useRef(0);
 
     function handleRemoveWidget(widgetId: string, widgetTitle: string) {
-        if (!window.confirm(`Remove “${widgetTitle}” from this dashboard?`)) {
+        // Run the pending remove through `.dashboard.grid.remove` so a
+        // plugin can veto (return `false` — silent, subscriber owns the
+        // user feedback) or rewrite the identifying pair (rename the
+        // confirm-dialog title, redirect to a different widget id). The
+        // filter runs BEFORE the confirm dialog so a subscriber can
+        // suppress the raw `window.confirm` in favor of a themed one.
+        const filtered = applyFilters<{ widgetId: string; widgetTitle: string } | false>(
+            'keystone.admin.dashboard.grid.remove',
+            { widgetId, widgetTitle },
+            { dashboardId: current.id, dashboardSlug: current.slug },
+        );
+        if (false === filtered) {
             return;
         }
 
-        router.delete(destroyWidget({ slug: current.slug, id: widgetId }).url, {
+        if (!keystoneConfirm(`Remove “${filtered.widgetTitle}” from this dashboard?`)) {
+            return;
+        }
+
+        router.delete(destroyWidget({ slug: current.slug, id: filtered.widgetId }).url, {
             preserveScroll: true,
             preserveState: true,
             only: ['current', 'available_widgets'],
@@ -91,23 +147,52 @@ export default function Dashboard({ dashboards, current, available_widgets, star
     }
 
     function handleReorderWidgets(orderedIds: string[]) {
-        const previous = orderedWidgets;
-        const byId = new Map(previous.map((widget) => [widget.id, widget]));
-        const next: Widget[] = [];
-
-        for (const id of orderedIds) {
-            const widget = byId.get(id);
-            if (widget) {
-                next.push(widget);
-            }
-        }
-
-        // If the optimistic list doesn't match what we had, bail out. This
-        // protects against the grid handing us a stale ID set after a
-        // server-driven add/remove race, which would otherwise drop widgets.
-        if (next.length !== previous.length) {
+        // Run the caller's optimistic id order through `.dashboard.grid.reorder`
+        // so a plugin can veto the reorder (return `false` — silent, matches
+        // the `.edit.delete` / `.router.navigate` convention) or rewrite the
+        // ordering (e.g. clamp a "pinned" widget back to position 0). The
+        // rewritten list still has to match the current visible set for the
+        // reorder to proceed — the length/set validation below runs against
+        // whatever the filter chain settled on, not the raw input.
+        const filteredOrder = applyFilters<string[] | false>(
+            'keystone.admin.dashboard.grid.reorder',
+            orderedIds,
+            { dashboardId: current.id, dashboardSlug: current.slug },
+        );
+        if (false === filteredOrder) {
             return;
         }
+
+        const previous = orderedWidgets;
+        const byId = new Map(previous.map((widget) => [widget.id, widget]));
+
+        // Reject anything that isn't an exact permutation of the current
+        // visible id set. A length-only check would let a filter return
+        // `[a, a, c]` in place of `[a, b, c]`: the duplicate offsets the
+        // missing entry so the lengths match, then the sequential
+        // `visibleIter` lookup below desyncs and the persisted order
+        // silently drops `b` while writing `a` twice. Also protects
+        // against a stale ID set from a server-driven add/remove race
+        // (the original bailout case).
+        //
+        // Every filtered id must also exist in the server-provided
+        // `current.widgets` — the `.widgets.list` filter one layer up
+        // can inject synthetic client-only widgets (docs suggest this
+        // pattern for plugin-owned rows), and reordering with an id
+        // the server doesn't recognize would send a corrupted payload
+        // that either 422s or persists a nonsense order.
+        const uniqueFilteredIds = new Set(filteredOrder);
+        const currentWidgetIds = new Set(current.widgets.map((widget) => widget.id));
+        if (
+            uniqueFilteredIds.size !== filteredOrder.length ||
+            uniqueFilteredIds.size !== previous.length ||
+            !previous.every((widget) => uniqueFilteredIds.has(widget.id)) ||
+            !filteredOrder.every((id) => currentWidgetIds.has(id))
+        ) {
+            return;
+        }
+
+        const next: Widget[] = filteredOrder.map((id: string) => byId.get(id) as Widget);
 
         // Thread the new visible order back into the full persisted layout,
         // keeping orphan and self-collapsed widgets at their original
@@ -115,8 +200,8 @@ export default function Dashboard({ dashboards, current, available_widgets, star
         // every stored widget id (see DashboardController::reorderWidgets);
         // a payload of only visible ids would 422 the request as soon as
         // the dashboard holds an orphan or a hidden widget.
-        const visibleIdSet = new Set(orderedIds);
-        const visibleIter = orderedIds[Symbol.iterator]();
+        const visibleIdSet = new Set(filteredOrder);
+        const visibleIter = filteredOrder[Symbol.iterator]();
         const fullOrderIds = current.widgets.map((widget) => {
             if (visibleIdSet.has(widget.id)) {
                 return visibleIter.next().value as string;
@@ -146,6 +231,35 @@ export default function Dashboard({ dashboards, current, available_widgets, star
         );
     }
 
+    // Built-in trailing action row on the dashboard PageHeader. Run it
+    // through `.dashboard.headerActions` so a plugin can prepend / append
+    // controls, swap the Add-widget button for its own variant, or wrap
+    // the row in extra chrome (e.g. a "Save layout" button for a plugin
+    // that persists local reorders). Args:
+    // `(ReactNode, { dashboardId, dashboardSlug })`.
+    const defaultHeaderActions = (
+        <>
+            <DashboardSwitcher
+                dashboards={dashboards}
+                currentSlug={current.slug}
+                onCreateClick={() => setCreateOpen(true)}
+            />
+            <button
+                type="button"
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-content hover:bg-primary/90"
+                onClick={() => setDrawerOpen(true)}
+            >
+                Add widget
+            </button>
+        </>
+    );
+
+    const headerActions = applyFilters<ReactNode>(
+        'keystone.admin.dashboard.headerActions',
+        defaultHeaderActions,
+        { dashboardId: current.id, dashboardSlug: current.slug },
+    );
+
     return (
         <>
             <Head title={current.name} />
@@ -153,22 +267,7 @@ export default function Dashboard({ dashboards, current, available_widgets, star
                 <PageHeader
                     title={current.name}
                     description="Your dashboard"
-                    actions={
-                        <>
-                            <DashboardSwitcher
-                                dashboards={dashboards}
-                                currentSlug={current.slug}
-                                onCreateClick={() => setCreateOpen(true)}
-                            />
-                            <button
-                                type="button"
-                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-content hover:bg-primary/90"
-                                onClick={() => setDrawerOpen(true)}
-                            >
-                                Add widget
-                            </button>
-                        </>
-                    }
+                    actions={headerActions}
                 />
 
                 <UpdateAvailableBanner />
@@ -176,7 +275,7 @@ export default function Dashboard({ dashboards, current, available_widgets, star
                 {orderedWidgets.length > 0 ? (
                     <DashboardGrid
                         widgets={orderedWidgets}
-                        availableWidgets={available_widgets}
+                        availableWidgets={filteredAvailableWidgets}
                         onRemoveWidget={handleRemoveWidget}
                         onReorderWidgets={handleReorderWidgets}
                         onEditWidget={(id) => setEditingWidgetId(id)}
@@ -186,7 +285,7 @@ export default function Dashboard({ dashboards, current, available_widgets, star
                     <StarterPicker
                         dashboardSlug={current.slug}
                         starters={starters}
-                        availableWidgets={available_widgets}
+                        availableWidgets={filteredAvailableWidgets}
                     />
                 )}
             </div>
@@ -194,7 +293,7 @@ export default function Dashboard({ dashboards, current, available_widgets, star
             <AddWidgetDrawer
                 open={drawerOpen}
                 dashboardSlug={current.slug}
-                availableWidgets={available_widgets}
+                availableWidgets={filteredAvailableWidgets}
                 onClose={() => setDrawerOpen(false)}
             />
 

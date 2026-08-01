@@ -102,6 +102,8 @@ class PrivacyController extends Controller
             'retention_days'  => ['nullable', 'integer', 'min:1', 'max:3650'],
         ]);
 
+        $diff = [];
+
         foreach (self::GENERAL_FIELDS as $key => $meta) {
             if (! array_key_exists($key, $validated)) {
                 continue;
@@ -123,6 +125,12 @@ class PrivacyController extends Controller
                 default  => null === $raw || '' === $raw ? null : $raw,
             };
 
+            $previous = config($meta['config']);
+
+            if ($previous !== $cfgValue) {
+                $diff[$key] = ['from' => $previous, 'to' => $cfgValue];
+            }
+
             config()->set($meta['config'], $cfgValue);
         }
 
@@ -135,6 +143,11 @@ class PrivacyController extends Controller
         if (App::configurationIsCached()) {
             DeferredConfigCacheRebuild::schedule();
         }
+
+        // Per-panel first, then the generic aggregator — subscribers can
+        // hook whichever granularity fits their use case.
+        doAction('keystone.admin.settings.privacy.saved', ['panel' => 'privacy', 'diff' => $diff]);
+        doAction('keystone.admin.settings.saved', ['panel' => 'privacy', 'diff' => $diff]);
 
         return back()->with('success', 'Privacy settings saved.');
     }

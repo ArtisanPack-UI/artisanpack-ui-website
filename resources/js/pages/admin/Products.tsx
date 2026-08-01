@@ -51,6 +51,7 @@ export default function Products({ products }: { products: ProductRow[] }) {
 
                 <Card padded={false}>
                     <DataTable<ProductRow>
+                        resource="products"
                         columns={[
                             {
                                 key: 'name',

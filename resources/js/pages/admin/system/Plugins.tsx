@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Card, EmptyState, PageHeader } from '@/components/admin/keystone';
 import {
@@ -235,27 +236,12 @@ export default function Plugins() {
                     <div className="grid grid-cols-12 gap-7">
                         {plugins.map((plugin) => {
                             const isPending = pendingSlugs.has(plugin.slug);
-                            return (
-                            <Card key={plugin.slug} className="col-span-12 sm:col-span-6 xl:col-span-4 flex flex-col gap-3">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <div className="font-display text-base font-semibold text-base-content">{plugin.name}</div>
-                                        {plugin.version || plugin.author ? (
-                                            <div className="text-xs text-base-content/55">
-                                                {plugin.version ? `v${plugin.version}` : null}
-                                                {plugin.version && plugin.author ? ' · ' : null}
-                                                {plugin.author}
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                    <div className="flex flex-col items-end gap-1">
-                                        {plugin.is_active ? <ActiveBadge /> : <InactiveBadge />}
-                                        {plugin.update_available ? <UpdateBadge version={plugin.available_version} /> : null}
-                                    </div>
-                                </div>
-                                {plugin.description ? (
-                                    <div className="text-sm text-base-content/65">{plugin.description}</div>
-                                ) : null}
+                            // Built-in action row for a plugin card. Route
+                            // through `.plugins.actions` first so a plugin
+                            // can inject controls (e.g. "View settings",
+                            // "Report issue") without forking the page.
+                            // Args: `(ReactNode, { plugin, isPending })`.
+                            const defaultActions: ReactNode = (
                                 <div className="mt-auto flex flex-wrap items-center gap-2">
                                     {plugin.is_active ? (
                                         <button
@@ -298,8 +284,51 @@ export default function Plugins() {
                                         Remove
                                     </button>
                                 </div>
-                            </Card>
                             );
+
+                            const actions = applyFilters<ReactNode>(
+                                'keystone.admin.plugins.actions',
+                                defaultActions,
+                                { plugin, isPending },
+                            );
+
+                            // Built-in card body — header, description, actions.
+                            // `.plugins.card` filter wraps the whole card so a
+                            // plugin can swap the entire tile (e.g. a plugin-
+                            // owned "premium" look) or add chrome around it.
+                            // Args: `(ReactNode, { plugin, isPending })`.
+                            const defaultCard: ReactNode = (
+                                <Card className="flex flex-col gap-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <div className="font-display text-base font-semibold text-base-content">{plugin.name}</div>
+                                            {plugin.version || plugin.author ? (
+                                                <div className="text-xs text-base-content/55">
+                                                    {plugin.version ? `v${plugin.version}` : null}
+                                                    {plugin.version && plugin.author ? ' · ' : null}
+                                                    {plugin.author}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                        <div className="flex flex-col items-end gap-1">
+                                            {plugin.is_active ? <ActiveBadge /> : <InactiveBadge />}
+                                            {plugin.update_available ? <UpdateBadge version={plugin.available_version} /> : null}
+                                        </div>
+                                    </div>
+                                    {plugin.description ? (
+                                        <div className="text-sm text-base-content/65">{plugin.description}</div>
+                                    ) : null}
+                                    {actions}
+                                </Card>
+                            );
+
+                            const card = applyFilters<ReactNode>(
+                                'keystone.admin.plugins.card',
+                                defaultCard,
+                                { plugin, isPending },
+                            );
+
+                            return <div key={plugin.slug} className="col-span-12 sm:col-span-6 xl:col-span-4">{card}</div>;
                         })}
                     </div>
                 )}

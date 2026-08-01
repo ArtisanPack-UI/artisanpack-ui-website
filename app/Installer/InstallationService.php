@@ -36,24 +36,58 @@ class InstallationService
     {
         $report = new InstallationReport;
 
+        // Hook subscribers never receive raw credentials — installer plaintext
+        // passwords stay on the trusted return path only. `redactOptions()`
+        // and `redactReport()` return cloned DTOs with every password field
+        // nulled out; plugin authors get everything else (site type, admin
+        // email, per-step outcomes) but nothing they could log or persist to
+        // hijack the freshly-provisioned site.
+        //
+        // Every dispatch goes through `safeDoAction()` so a throwing plugin
+        // subscriber can never abort a mid-flight install — the exception
+        // gets recorded as a non-fatal `hook_failed` step and installation
+        // proceeds. Hook failures are visible in the report but do not
+        // count toward `hasFailures()`, so the `.installed` flag still
+        // writes on an otherwise-successful run.
+        $this->safeDoAction('keystone.installer.starting', $report, $this->redactOptions($options));
+
         $this->runMigrations($report);
+        $this->safeDoAction('keystone.installer.migrated', $report, $this->redactReport($report));
+
         $this->seedDefaults($report);
+        $this->safeDoAction('keystone.installer.seeded', $report, $this->redactReport($report));
+
         $this->persistSiteConfiguration($options, $report);
-        $this->importTheme($options, $report);
+        $this->safeDoAction('keystone.installer.siteConfigured', $report, $this->redactOptions($options), $this->redactReport($report));
+
+        $themeSlug = $this->importTheme($options, $report);
+        $this->safeDoAction('keystone.installer.themeInstalled', $report, $themeSlug, $this->redactReport($report));
+
         $admin = $this->createAdminUser($options, $report);
-        $this->createSiteOwner($options, $report);
+        $this->safeDoAction('keystone.installer.adminCreated', $report, $admin, $this->redactReport($report));
+
+        $siteOwner = $this->createSiteOwner($options, $report);
+        $this->safeDoAction('keystone.installer.siteOwnerCreated', $report, $siteOwner, $this->redactReport($report));
+
         $this->generateSitemap($report);
+        $this->safeDoAction('keystone.installer.sitemapGenerated', $report, $this->redactReport($report));
+
         $this->cacheFramework($report);
+        $this->safeDoAction('keystone.installer.cached', $report, $this->redactReport($report));
 
         // Only mark the site installed if every step succeeded — otherwise
         // the next run would hit InstallCommand's "already installed" branch
-        // and skip the retry path the service is built to support.
+        // and skip the retry path the service is built to support. Hook
+        // failures use the `hook_failed` status, which `hasFailures()`
+        // deliberately ignores.
         if (! $report->hasFailures()) {
             $this->writeInstalledFlag($report);
         }
 
         $report->adminUser     = $admin;
         $report->adminPassword = $options->generatedAdminPassword;
+
+        $this->safeDoAction('keystone.installer.completed', $report, $this->redactReport($report));
 
         return $report;
     }
@@ -66,6 +100,39 @@ class InstallationService
     public function installedFlagPath(): string
     {
         return (string) config('keystone.install.flag_path', storage_path('app/.installed'));
+    }
+
+    /**
+     * Dispatch a lifecycle hook without letting a throwing subscriber
+     * kill the install. Exceptions are recorded on the report as a
+     * `hook_failed` step (a distinct status from `failed` so the
+     * `.installed` flag still writes on an otherwise-clean run).
+     */
+    private function safeDoAction(string $hook, InstallationReport $report, mixed ...$args): void
+    {
+        try {
+            doAction($hook, ...$args);
+        } catch (Throwable $e) {
+            $report->step('hook:'.$hook, 'hook_failed', $e::class.': '.$e->getMessage());
+        }
+    }
+
+    private function redactOptions(InstallationOptions $options): InstallationOptions
+    {
+        $redacted                             = clone $options;
+        $redacted->adminPassword              = null;
+        $redacted->generatedAdminPassword     = null;
+        $redacted->generatedSiteOwnerPassword = null;
+
+        return $redacted;
+    }
+
+    private function redactReport(InstallationReport $report): InstallationReport
+    {
+        $redacted                = clone $report;
+        $redacted->adminPassword = null;
+
+        return $redacted;
     }
 
     private function runMigrations(InstallationReport $report): void
@@ -185,20 +252,20 @@ class InstallationService
         return $scheme.'://'.$host;
     }
 
-    private function importTheme(InstallationOptions $options, InstallationReport $report): void
+    private function importTheme(InstallationOptions $options, InstallationReport $report): ?string
     {
         $zip = $options->themeZipPath;
 
         if (null === $zip || '' === $zip) {
             $report->step('theme', 'skipped');
 
-            return;
+            return null;
         }
 
         if (! is_file($zip)) {
             $report->step('theme', 'failed', "Theme zip not found at {$zip}");
 
-            return;
+            return null;
         }
 
         try {
@@ -211,6 +278,8 @@ class InstallationService
             }
 
             $report->step('theme', 'ok', "Installed theme: {$slug}");
+
+            return '' !== $slug ? $slug : null;
         } catch (ThemeInstallationException $e) {
             // The framework throws `ThemeInstallationException::alreadyInstalled()`
             // when the slug directory already exists — that's the idempotent
@@ -219,13 +288,15 @@ class InstallationService
             if (str_contains($e->getMessage(), 'already installed')) {
                 $report->step('theme', 'skipped', $e->getMessage());
 
-                return;
+                return null;
             }
 
             $report->step('theme', 'failed', $e->getMessage());
         } catch (Throwable $e) {
             $report->step('theme', 'failed', $e->getMessage());
         }
+
+        return null;
     }
 
     private function createAdminUser(InstallationOptions $options, InstallationReport $report): User
@@ -270,14 +341,14 @@ class InstallationService
         return $user;
     }
 
-    private function createSiteOwner(InstallationOptions $options, InstallationReport $report): void
+    private function createSiteOwner(InstallationOptions $options, InstallationReport $report): ?User
     {
         $email = $options->siteOwnerEmail;
 
         if (null === $email || '' === $email) {
             $report->step('site_owner', 'skipped');
 
-            return;
+            return null;
         }
 
         $existing = User::query()->where('email', $email)->first();
@@ -286,7 +357,7 @@ class InstallationService
             $existing->assignRole('site_owner');
             $report->step('site_owner', 'skipped', 'Site owner already exists.');
 
-            return;
+            return $existing;
         }
 
         $password = Str::password(16, symbols: false);
@@ -305,11 +376,20 @@ class InstallationService
         $options->generatedSiteOwnerPassword = $password;
 
         $report->step('site_owner', 'ok', "Created site owner: {$email}");
+
+        return $user;
     }
 
     private function generateSitemap(InstallationReport $report): void
     {
         try {
+            // #154 — hand plugin subscribers a chance to hide entries
+            // via `keystone.seo.sitemap.entries` before vendor generates
+            // XML. Reconciler flips `is_indexable=false` on omitted
+            // rows so vendor's `SitemapEntry::indexable()` scope skips
+            // them without touching the polymorphic FK.
+            app(\App\Support\Seo\SitemapEntryReconciler::class)->apply();
+
             Artisan::call('seo:generate-sitemap');
             $report->step('sitemap', 'ok');
         } catch (Throwable $e) {

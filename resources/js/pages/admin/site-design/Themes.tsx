@@ -1,5 +1,6 @@
 import { useRef, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Card, EmptyState, PageHeader } from '@/components/admin/keystone';
 import { activate, destroy, store as uploadRoute } from '@/routes/admin/site-design/themes';
@@ -147,44 +148,59 @@ export default function Themes() {
                     </Card>
                 ) : (
                     <div className="grid grid-cols-12 gap-7">
-                        {themes.map((theme) => (
-                            <Card key={theme.slug} className="col-span-12 sm:col-span-6 xl:col-span-4 flex flex-col gap-3">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <div className="font-display text-base font-semibold text-base-content">{theme.name}</div>
-                                        {theme.version || theme.author ? (
-                                            <div className="text-xs text-base-content/55">
-                                                {theme.version ? `v${theme.version}` : null}
-                                                {theme.version && theme.author ? ' · ' : null}
-                                                {theme.author}
-                                            </div>
-                                        ) : null}
+                        {themes.map((theme) => {
+                            // Built-in theme-card body. `.siteDesign.themes.card`
+                            // wraps the whole tile so a plugin can swap in its
+                            // own render (add a preview thumbnail, a "premium"
+                            // badge, an upsell link) without forking this
+                            // page. Args: `(ReactNode, { theme })`.
+                            const defaultCard: ReactNode = (
+                                <Card className="flex flex-col gap-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <div className="font-display text-base font-semibold text-base-content">{theme.name}</div>
+                                            {theme.version || theme.author ? (
+                                                <div className="text-xs text-base-content/55">
+                                                    {theme.version ? `v${theme.version}` : null}
+                                                    {theme.version && theme.author ? ' · ' : null}
+                                                    {theme.author}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                        {theme.is_active ? <ActiveBadge /> : null}
                                     </div>
-                                    {theme.is_active ? <ActiveBadge /> : null}
-                                </div>
-                                {theme.description ? (
-                                    <div className="text-sm text-base-content/65">{theme.description}</div>
-                                ) : null}
-                                <div className="mt-auto flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => handleActivate(theme)}
-                                        disabled={theme.is_active}
-                                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                        {theme.is_active ? 'Active' : 'Activate'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleDelete(theme)}
-                                        disabled={theme.is_active}
-                                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200 disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                        Remove
-                                    </button>
-                                </div>
-                            </Card>
-                        ))}
+                                    {theme.description ? (
+                                        <div className="text-sm text-base-content/65">{theme.description}</div>
+                                    ) : null}
+                                    <div className="mt-auto flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleActivate(theme)}
+                                            disabled={theme.is_active}
+                                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+                                        >
+                                            {theme.is_active ? 'Active' : 'Activate'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDelete(theme)}
+                                            disabled={theme.is_active}
+                                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                </Card>
+                            );
+
+                            const card = applyFilters<ReactNode>(
+                                'keystone.admin.siteDesign.themes.card',
+                                defaultCard,
+                                { theme },
+                            );
+
+                            return <div key={theme.slug} className="col-span-12 sm:col-span-6 xl:col-span-4">{card}</div>;
+                        })}
                     </div>
                 )}
             </div>

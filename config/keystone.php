@@ -191,4 +191,34 @@ return [
         ))),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Preview
+    |--------------------------------------------------------------------------
+    |
+    | Signed-URL preview infrastructure for drafts and scheduled records.
+    | The Publish panel's Preview button generates a `/preview/{type}/{id}`
+    | URL signed by the app key; anyone with the link can view the record
+    | through the active theme regardless of its status.
+    |
+    | Tradeoff to be aware of: the link is a bearer token with no
+    | revocation short of rotating APP_KEY, the route sits outside the
+    | `site.access` middleware (so it also bypasses a site password), and
+    | the controller re-fetches *current* content at click time — so a
+    | leaked URL exposes the record as it evolves, not as it was when the
+    | link was made. `ttl` is the only real containment, which is why the
+    | default is two hours rather than a day: long enough to send to a
+    | reviewer and get notes back, short enough that a link pasted into a
+    | chat log or caught in a screen share stops working the same
+    | afternoon. Raise it via KEYSTONE_PREVIEW_TTL if your review cycle
+    | genuinely needs longer.
+    |
+    */
+
+    'preview' => [
+        'ttl' => is_numeric(env('KEYSTONE_PREVIEW_TTL', 7200))
+            ? max(60, (int) env('KEYSTONE_PREVIEW_TTL', 7200))
+            : 7200,
+    ],
+
 ];

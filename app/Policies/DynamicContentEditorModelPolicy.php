@@ -18,7 +18,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
  * Beyond the role check, the policy also re-verifies that the model
  * is bound to a still-registered persisted content type whose
  * `show_in_admin` flag is on. That closes the loop with the
- * `ap.visual-editor.resources` filter registration in
+ * `ap.visualEditor.resources` filter registration in
  * {@see \App\Providers\AppServiceProvider}: even if a plugin (or an
  * unrelated startup order) sneaks a hidden or deleted content type
  * back into the resource map, the policy still refuses.

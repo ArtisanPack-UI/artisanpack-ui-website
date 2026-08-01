@@ -65,16 +65,27 @@ class BusinessInfoController extends Controller
         Gate::authorize('update', Setting::class);
 
         $validated = $request->validated();
+        $diff      = [];
 
         foreach (self::FIELD_MAP as $envelopeKey => $settingKey) {
             if (array_key_exists($envelopeKey, $validated)) {
-                $this->settings->updateSetting($settingKey, $validated[$envelopeKey]);
+                $previous = $this->settings->getSetting($settingKey);
+                $next     = $validated[$envelopeKey];
+
+                if ($previous !== $next) {
+                    $diff[$envelopeKey] = ['from' => $previous, 'to' => $next];
+                }
+
+                $this->settings->updateSetting($settingKey, $next);
 
                 // TODO(#20): dispatch PurgeCloudflareCacheJob(["global:{$envelopeKey}"])
                 // once that job lands. Matches the deferred-dispatch pattern in
                 // ThemeController::activate().
             }
         }
+
+        doAction('keystone.admin.settings.businessInfo.saved', ['panel' => 'businessInfo', 'diff' => $diff]);
+        doAction('keystone.admin.settings.saved', ['panel' => 'businessInfo', 'diff' => $diff]);
 
         return back()->with('success', __('Business info updated.'));
     }

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import CollapsibleCard from '@/components/admin/CollapsibleCard';
 import { CustomFieldRenderer } from './CustomFieldRenderer';
 import type { CustomFieldRecord } from './types';
@@ -25,7 +27,7 @@ export default function CustomFieldsSection({
         return null;
     }
 
-    return (
+    const section: ReactNode = (
         <CollapsibleCard
             title="Custom Fields"
             summary={`${fields.length} field${fields.length === 1 ? '' : 's'}`}
@@ -43,6 +45,17 @@ export default function CustomFieldsSection({
                 ))}
             </div>
         </CollapsibleCard>
+    );
+
+    // `keystone.admin.customFields.section` — wraps the entire Custom
+    // Fields card so plugins can inject headers/footers, swap the
+    // container, or gate the whole surface behind a feature flag. Args:
+    // `(ReactNode, { fields, values, errors })`. Return `null` to
+    // suppress the section entirely.
+    return applyFilters<ReactNode>(
+        'keystone.admin.customFields.section',
+        section,
+        { fields, values, errors },
     );
 }
 

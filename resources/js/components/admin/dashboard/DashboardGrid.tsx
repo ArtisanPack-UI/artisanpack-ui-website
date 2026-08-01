@@ -15,7 +15,8 @@ import {
     useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { CSSProperties } from 'react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
+import type { CSSProperties, ReactNode } from 'react';
 import { Widget as WidgetChrome } from '@/components/admin/keystone';
 import { resolveWidget } from '@/lib/admin/widget-registry';
 import { widgetHasSettings } from '@/components/admin/dashboard/WidgetSettingsModal';
@@ -184,6 +185,34 @@ export function DashboardGrid({ widgets, availableWidgets, onRemoveWidget, onReo
                             return null;
                         }
 
+                        // Built-in widget body — either the error placeholder
+                        // (when the payload set `.error`) or the resolved
+                        // component. Run it through `.dashboard.widget.render`
+                        // so a plugin can wrap / decorate / replace the
+                        // rendered body without forking the grid (e.g.
+                        // an ErrorBoundary wrapper, an "unsaved changes"
+                        // overlay for the widget being edited, a locked
+                        // pane for a permission-gated widget). Args:
+                        // `(ReactNode, { widget, catalog })`. Return `null`
+                        // to hide the body while keeping the widget chrome.
+                        const defaultBody: ReactNode = widget.error ? (
+                            <div className="grid h-32 place-items-center text-sm text-base-content/55">
+                                This widget couldn&apos;t load.
+                            </div>
+                        ) : (
+                            <Component
+                                widget={widget}
+                                data={widget.data}
+                                options={widget.options}
+                            />
+                        );
+
+                        const body = applyFilters<ReactNode>(
+                            'keystone.admin.dashboard.widget.render',
+                            defaultBody,
+                            { widget, catalog },
+                        );
+
                         return (
                             <SortableWidget
                                 key={widget.id}
@@ -194,17 +223,7 @@ export function DashboardGrid({ widgets, availableWidgets, onRemoveWidget, onReo
                                 draggable={Boolean(onReorderWidgets)}
                                 isDemo={Boolean(catalog.is_demo)}
                             >
-                                {widget.error ? (
-                                    <div className="grid h-32 place-items-center text-sm text-base-content/55">
-                                        This widget couldn&apos;t load.
-                                    </div>
-                                ) : (
-                                    <Component
-                                        widget={widget}
-                                        data={widget.data}
-                                        options={widget.options}
-                                    />
-                                )}
+                                {body}
                             </SortableWidget>
                         );
                     })}

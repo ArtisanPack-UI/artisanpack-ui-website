@@ -1,10 +1,12 @@
 import {
     useEffect,
+    useMemo,
     useRef,
     useState,
     type HTMLAttributes,
     type ReactNode,
 } from 'react';
+import { applyFilters, doAction } from '@artisanpack-ui/hooks-js';
 
 export type Tone =
     | 'success'
@@ -225,7 +227,12 @@ export const Icon = {
 } as const;
 
 export interface PageHeaderProps {
-    title: string;
+    /**
+     * Omit when the page renders its own title elsewhere (e.g. the
+     * editor screens use a large inline title input in the main
+     * column). The header still renders breadcrumbs and actions.
+     */
+    title?: string;
     description?: string;
     breadcrumbs?: string[];
     actions?: ReactNode;
@@ -236,22 +243,37 @@ export function PageHeader({ title, description, breadcrumbs, actions }: PageHea
         <div className="flex flex-col gap-4 border-b border-base-300/60 pb-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex flex-col gap-2">
                 {breadcrumbs && (
-                    <nav className="flex items-center gap-1.5 text-xs font-medium text-base-content/55">
+                    <nav className="flex items-center gap-1.5 text-xs font-medium text-base-content/70">
                         {breadcrumbs.map((crumb, idx) => (
-                            <span key={crumb} className="flex items-center gap-1.5">
+                            // Index-prefixed: the crumb text is not unique
+                            // (an "Edit" page whose title is also "Edit",
+                            // a nested type sharing its parent's name),
+                            // and duplicate keys make React drop siblings.
+                            <span key={`${idx}-${crumb}`} className="flex items-center gap-1.5">
                                 <span className={idx === breadcrumbs.length - 1 ? 'text-base-content' : ''}>
                                     {crumb}
                                 </span>
                                 {idx < breadcrumbs.length - 1 && (
-                                    <span className="text-base-content/30">/</span>
+                                    <span aria-hidden className="text-base-content/60">/</span>
                                 )}
                             </span>
                         ))}
                     </nav>
                 )}
-                <h1 className="font-display text-2xl font-bold tracking-tight text-base-content lg:text-[28px]">
-                    {title}
-                </h1>
+                {title ? (
+                    <h1 className="font-display text-2xl font-bold tracking-tight text-base-content lg:text-[28px]">
+                        {title}
+                    </h1>
+                ) : (
+                    // Fallback so screen-reader "jump to headings" still
+                    // finds this page. Derived from the last breadcrumb
+                    // when the caller omits `title` (editor screens use
+                    // an inline title `<input>` in the main column,
+                    // which isn't a heading).
+                    breadcrumbs && breadcrumbs.length > 0 && (
+                        <h1 className="sr-only">{breadcrumbs[breadcrumbs.length - 1]}</h1>
+                    )
+                )}
                 {description && (
                     <p className="max-w-2xl text-sm text-base-content/65">{description}</p>
                 )}
@@ -300,7 +322,7 @@ export function Widget({ title, subtitle, action, footer, className = '', childr
                             </h3>
                         )}
                         {subtitle && (
-                            <p className="mt-0.5 text-xs text-base-content/55">{subtitle}</p>
+                            <p className="mt-0.5 text-xs text-base-content/70">{subtitle}</p>
                         )}
                     </div>
                     {action && <div className="flex shrink-0 items-center gap-1">{action}</div>}
@@ -322,22 +344,43 @@ export interface StatusBadgeProps {
     tone?: Tone;
 }
 
+/**
+ * Status chip. The tone is carried by the tint, the border, and the dot —
+ * never by the label text, which stays `base-content` (#193).
+ *
+ * Coloured 11px text on its own 10%-opacity tint measured 3.5–4.4:1 in
+ * light mode, under the 4.5:1 WCAG 1.4.3 floor. The dot keeps the hue as a
+ * visual cue and is `aria-hidden`, so nothing rides on colour alone.
+ */
 export function StatusBadge({ status, label, tone }: StatusBadgeProps) {
     const toneClass: Record<Tone, string> = {
-        success: 'bg-success/10 text-success border-success/20',
-        info: 'bg-info/10 text-info border-info/20',
-        warning: 'bg-warning/15 text-warning border-warning/25',
-        error: 'bg-error/10 text-error border-error/20',
-        neutral: 'bg-base-200 text-base-content/70 border-base-300/60',
-        accent: 'bg-accent/15 text-accent border-accent/30',
-        primary: 'bg-primary/10 text-primary border-primary/20',
+        success: 'bg-success/15 border-success/45',
+        info: 'bg-info/15 border-info/45',
+        warning: 'bg-warning/15 border-warning/45',
+        error: 'bg-error/15 border-error/45',
+        neutral: 'bg-base-200 border-base-300/60',
+        accent: 'bg-accent/15 border-accent/45',
+        primary: 'bg-primary/15 border-primary/45',
+    };
+
+    const dotClass: Record<Tone, string> = {
+        success: 'bg-success',
+        info: 'bg-info',
+        warning: 'bg-warning',
+        error: 'bg-error',
+        neutral: 'bg-base-content/45',
+        accent: 'bg-accent',
+        primary: 'bg-primary',
     };
 
     return (
         <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${toneClass[tone ?? 'neutral']}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide text-base-content ${toneClass[tone ?? 'neutral']}`}
         >
-            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+            <span
+                className={`h-1.5 w-1.5 rounded-full ${dotClass[tone ?? 'neutral']}`}
+                aria-hidden
+            />
             {label || status}
         </span>
     );
@@ -362,7 +405,7 @@ export function KpiTile({ label, value, delta, deltaLabel, icon }: KpiTileProps)
                 </span>
             )}
             <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-semibold tracking-[0.12em] uppercase text-base-content/55">
+                <div className="text-[11px] font-semibold tracking-[0.12em] uppercase text-base-content/70">
                     {label}
                 </div>
                 <div className="mt-1 font-display text-[26px] font-bold tracking-tight text-base-content">
@@ -383,7 +426,7 @@ export function KpiTile({ label, value, delta, deltaLabel, icon }: KpiTileProps)
                         </span>
                         <span>{Math.abs(delta).toFixed(1)}%</span>
                         {deltaLabel && (
-                            <span className="font-medium text-base-content/55">{deltaLabel}</span>
+                            <span className="font-medium text-base-content/70">{deltaLabel}</span>
                         )}
                     </div>
                 )}
@@ -400,58 +443,366 @@ export interface DataTableColumn<T> {
     render?: (row: T) => ReactNode;
 }
 
+/**
+ * A row-level action rendered as a trailing column button.
+ * Emitted by `keystone.admin.dataTable.rowActions` (generic) and
+ * `keystone.admin.{resource}.dataTable.rowActions` (resource-scoped).
+ */
+export interface DataTableRowAction<T> {
+    key:      string;
+    label:    string;
+    icon?:    ReactNode;
+    onSelect: (row: T) => void;
+    /** Predicate that hides the action for rows where it doesn't apply. */
+    disabled?: (row: T) => boolean;
+}
+
+/**
+ * A bulk-selection action. Rendered above the table when at least one
+ * bulk action is registered; the header gets a select-all checkbox and
+ * each row gets a select-one checkbox.
+ * Emitted by `keystone.admin.dataTable.bulkActions` (generic) and
+ * `keystone.admin.{resource}.dataTable.bulkActions` (resource-scoped).
+ */
+export interface DataTableBulkAction<T> {
+    key:      string;
+    label:    string;
+    icon?:    ReactNode;
+    onSelect: (rows: T[]) => void;
+}
+
 export interface DataTableProps<T> {
-    columns: Array<DataTableColumn<T>>;
-    rows: T[];
+    /**
+     * Stable identifier for this table's data model (`'posts'`, `'users'`,
+     * `'orders'`, …). Used as the scope segment in the resource-scoped
+     * filter names, so `<DataTable resource="posts" …>` fires the
+     * `keystone.admin.posts.dataTable.columns` filter alongside the
+     * generic `keystone.admin.dataTable.columns`. Required so plugins
+     * can target a single list page without also matching every other
+     * list page.
+     */
+    resource:   string;
+    columns:    Array<DataTableColumn<T>>;
+    rows:       T[];
     onRowClick?: (row: T) => void;
     emptyState?: ReactNode;
+    /**
+     * Current search query string used by the surrounding list page.
+     * Piped through `keystone.admin.list.query` (+ resource-scoped
+     * alias) so a plugin can observe or rewrite the effective query
+     * (redact PII from analytics, translate an aliased command).
+     * Pages that don't own a search box can leave this undefined.
+     */
+    searchQuery?: string;
+    /** Fires `.list.query`; pages that let plugins rewrite the query pass this to receive the filtered value. */
+    onSearchQueryChange?: (next: string) => void;
 }
 
 export function DataTable<T extends { id?: string | number }>({
-    columns,
-    rows,
+    resource,
+    columns: rawColumns,
+    rows: rawRows,
     onRowClick,
     emptyState,
+    searchQuery,
+    onSearchQueryChange,
 }: DataTableProps<T>) {
+    // Filter fanout: generic first, then resource-scoped so a plugin can
+    // rewrite/re-order everything or narrow its scope to one table.
+    // Wrapped in useMemo so filter chains only run when the input identity
+    // changes; late-registered callbacks pick up on the next parent render.
+    const columns = useMemo(
+        () => applyFilters<Array<DataTableColumn<T>>>(
+            `keystone.admin.${resource}.dataTable.columns`,
+            applyFilters<Array<DataTableColumn<T>>>('keystone.admin.dataTable.columns', rawColumns, resource),
+            resource,
+        ),
+        [rawColumns, resource],
+    );
+    const rows = useMemo(
+        () => applyFilters<T[]>(
+            `keystone.admin.${resource}.dataTable.rows`,
+            applyFilters<T[]>('keystone.admin.dataTable.rows', rawRows, resource),
+            resource,
+        ),
+        [rawRows, resource],
+    );
+    const rowActions = useMemo(
+        () => applyFilters<Array<DataTableRowAction<T>>>(
+            `keystone.admin.${resource}.dataTable.rowActions`,
+            applyFilters<Array<DataTableRowAction<T>>>('keystone.admin.dataTable.rowActions', [], resource),
+            resource,
+        ),
+        [resource],
+    );
+    const bulkActions = useMemo(
+        () => applyFilters<Array<DataTableBulkAction<T>>>(
+            `keystone.admin.${resource}.dataTable.bulkActions`,
+            applyFilters<Array<DataTableBulkAction<T>>>('keystone.admin.dataTable.bulkActions', [], resource),
+            resource,
+        ),
+        [resource],
+    );
+    // `.list.tabs` — plugin-injected tab strip rendered above the table.
+    // Starts as `null`; plugins can return any ReactNode. Both fire so
+    // a plugin can decorate every list page uniformly OR narrow to one
+    // resource. Args: `(ReactNode, resource)`.
+    const tabsSlot = useMemo(
+        () => applyFilters<ReactNode>(
+            `keystone.admin.${resource}.list.tabs`,
+            applyFilters<ReactNode>('keystone.admin.list.tabs', null, resource),
+            resource,
+        ),
+        [resource],
+    );
+    // `.list.filters` — plugin-injected filter chips row (advanced
+    // filters, saved views). Args: `(ReactNode, resource)`.
+    const filtersSlot = useMemo(
+        () => applyFilters<ReactNode>(
+            `keystone.admin.${resource}.list.filters`,
+            applyFilters<ReactNode>('keystone.admin.list.filters', null, resource),
+            resource,
+        ),
+        [resource],
+    );
+    // `.list.header.actions` — plugin-injected buttons at the top-right
+    // of the list header (bulk import, export, sync). Args:
+    // `(ReactNode, resource)`.
+    const headerActionsSlot = useMemo(
+        () => applyFilters<ReactNode>(
+            `keystone.admin.${resource}.list.header.actions`,
+            applyFilters<ReactNode>('keystone.admin.list.header.actions', null, resource),
+            resource,
+        ),
+        [resource],
+    );
+    // `.list.query` — filters the caller-supplied search string on
+    // every render. Any string return value is written back through
+    // `onSearchQueryChange` on change. A non-string return value
+    // (misbehaving plugin) is coerced back to the original query
+    // string — the guard below prevents a `false` / `undefined` from
+    // ever reaching the caller's controlled input state. Args:
+    // `(string, resource)`.
+    const filteredQuery = useMemo(() => {
+        const raw = applyFilters<unknown>(
+            `keystone.admin.${resource}.list.query`,
+            applyFilters<unknown>('keystone.admin.list.query', searchQuery ?? '', resource),
+            resource,
+        );
+        return typeof raw === 'string' ? raw : (searchQuery ?? '');
+    }, [searchQuery, resource]);
+    // Feedback-loop guard: once we emit a rewritten value to the
+    // parent, it becomes the next `searchQuery`, which flows back
+    // through the same filter chain. Without tracking the last emit,
+    // a plugin like `q => q + ' status:active'` would append on every
+    // pass and never converge. `lastEmittedRef` remembers the last
+    // value we asked the parent to adopt so we can short-circuit the
+    // follow-up render where the parent hands that value back. React-
+    // safe: `useEffect` runs after commit so the parent's setState
+    // never races with our render.
+    const lastEmittedRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (
+            onSearchQueryChange &&
+            searchQuery !== undefined &&
+            filteredQuery !== searchQuery &&
+            filteredQuery !== lastEmittedRef.current
+        ) {
+            lastEmittedRef.current = filteredQuery;
+            onSearchQueryChange(filteredQuery);
+        }
+    }, [filteredQuery, searchQuery, onSearchQueryChange]);
+
+    const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
+
+    // `.list.selectionChange` — fires per-render whenever the selected
+    // row-id set changes identity so a plugin can react to the current
+    // multi-select (enable a header button, sync a URL fragment). Both
+    // generic and resource-scoped variants fire. Args:
+    // `(Set<string|number>, resource)`.
+    useEffect(() => {
+        doAction('keystone.admin.list.selectionChange', selectedIds, resource);
+        doAction(`keystone.admin.${resource}.list.selectionChange`, selectedIds, resource);
+    }, [selectedIds, resource]);
+
+    // When rows change (filter/sort/paginate), intersect the current
+    // selection with the new row-id set so a bulk-action callback can
+    // never receive an id that no longer exists in the visible rows.
+    // Row identity — not just length — is the trigger; a same-length
+    // reshuffle would otherwise keep a stale id whose backing row is
+    // gone.
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional sync of external rows-prop identity to local selection set
+        setSelectedIds((prev) => {
+            if (prev.size === 0) return prev;
+            const visible = new Set<string | number>();
+            for (const r of rows) {
+                if (r.id !== undefined) visible.add(r.id);
+            }
+            let changed = false;
+            const next = new Set<string | number>();
+            for (const id of prev) {
+                if (visible.has(id)) {
+                    next.add(id);
+                } else {
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+    }, [rows]);
+
     if (!rows || rows.length === 0) {
-        return <>{emptyState ?? <EmptyState title="No records yet" />}</>;
+        // `.list.empty` — filter the empty-state node so a plugin can
+        // rewrite the pitch (e.g. show a "Get started with the sample
+        // dataset" CTA when the count is zero AND a flag is on).
+        // Args: `(ReactNode, resource)`.
+        const baseEmpty = emptyState ?? <EmptyState title="No records yet" />;
+        const rewritten = applyFilters<ReactNode>(
+            `keystone.admin.${resource}.list.empty`,
+            applyFilters<ReactNode>('keystone.admin.list.empty', baseEmpty, resource),
+            resource,
+        );
+        return <>{rewritten}</>;
     }
+
+    // Wrap the caller's row-click handler with the `.list.rowClick`
+    // action so plugins can observe (analytics, undo-stack recording)
+    // without wrapping the DataTable. Fires only when a row-click was
+    // provided so tables that are display-only still don't fire a
+    // spurious per-row event. Args: `(row, resource)`.
+    const handleRowClick = onRowClick
+        ? (row: T) => {
+            doAction('keystone.admin.list.rowClick', row, resource);
+            doAction(`keystone.admin.${resource}.list.rowClick`, row, resource);
+            onRowClick(row);
+        }
+        : undefined;
+
+    const hasBulk    = bulkActions.length > 0;
+    const hasActions = rowActions.length > 0;
+
+    const allSelected = hasBulk && rows.every((r) => r.id !== undefined && selectedIds.has(r.id));
+
+    function toggleAll() {
+        setSelectedIds((prev) => {
+            if (prev.size === rows.length) {
+                return new Set();
+            }
+            const next = new Set<string | number>();
+            for (const r of rows) {
+                if (r.id !== undefined) next.add(r.id);
+            }
+            return next;
+        });
+    }
+
+    function toggleOne(id: string | number) {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    }
+
+    const selectedRows = hasBulk ? rows.filter((r) => r.id !== undefined && selectedIds.has(r.id)) : [];
 
     return (
         <div className="overflow-x-auto">
+            {(tabsSlot || filtersSlot || headerActionsSlot) && (
+                <div className="mb-3 flex flex-col gap-2">
+                    {(tabsSlot || headerActionsSlot) && (
+                        <div className="flex items-center justify-between gap-2">
+                            <div>{tabsSlot}</div>
+                            <div className="flex items-center gap-2">{headerActionsSlot}</div>
+                        </div>
+                    )}
+                    {filtersSlot && <div>{filtersSlot}</div>}
+                </div>
+            )}
+            {hasBulk && selectedRows.length > 0 && (
+                <div className="mb-2 flex items-center gap-2 rounded-md border border-base-300/60 bg-base-200/40 px-3 py-2 text-xs">
+                    <span className="font-semibold">{selectedRows.length} selected</span>
+                    {bulkActions.map((action) => (
+                        <button
+                            key={action.key}
+                            type="button"
+                            onClick={() => action.onSelect(selectedRows)}
+                            className="rounded-md border border-base-300/60 bg-base-100 px-2 py-1 font-medium hover:bg-base-200"
+                        >
+                            {action.icon}
+                            {action.label}
+                        </button>
+                    ))}
+                </div>
+            )}
             <table className="w-full text-left text-sm">
                 <thead>
-                    <tr className="border-b border-base-300/60 text-[11px] font-semibold tracking-[0.08em] uppercase text-base-content/55">
+                    <tr className="border-b border-base-300/60 text-[11px] font-semibold tracking-[0.08em] uppercase text-base-content/70">
+                        {hasBulk && (
+                            <th className="w-8 px-4 py-3">
+                                <input
+                                    type="checkbox"
+                                    checked={allSelected}
+                                    onChange={toggleAll}
+                                    aria-label="Select all rows"
+                                />
+                            </th>
+                        )}
                         {columns.map((col) => (
                             <th key={col.key} className={`px-4 py-3 ${col.align === 'right' ? 'text-right' : ''}`}>
                                 {col.label}
                             </th>
                         ))}
+                        {hasActions && <th className="w-8 px-4 py-3 text-right" />}
                     </tr>
                 </thead>
                 <tbody>
                     {rows.map((row, idx) => (
                         <tr
                             key={row.id ?? idx}
-                            onClick={onRowClick ? () => onRowClick(row) : undefined}
+                            onClick={handleRowClick ? () => handleRowClick(row) : undefined}
                             onKeyDown={
-                                onRowClick
+                                handleRowClick
                                     ? (e) => {
+                                          // Keyboard activation on nested
+                                          // controls (bulk-select checkbox,
+                                          // row-action buttons) bubbles a
+                                          // Space/Enter keydown up to the
+                                          // row. Those controls only stop
+                                          // click propagation, not keydown,
+                                          // so without this guard hitting
+                                          // Space to toggle a checkbox
+                                          // would fire the row's onRowClick
+                                          // navigation AND suppress the
+                                          // checkbox toggle via
+                                          // preventDefault.
+                                          if (e.target !== e.currentTarget) return;
                                           if (e.key === 'Enter' || e.key === ' ') {
                                               e.preventDefault();
-                                              onRowClick(row);
+                                              handleRowClick(row);
                                           }
                                       }
                                     : undefined
                             }
-                            role={onRowClick ? 'button' : undefined}
-                            tabIndex={onRowClick ? 0 : undefined}
+                            role={handleRowClick ? 'button' : undefined}
+                            tabIndex={handleRowClick ? 0 : undefined}
                             className={`border-b border-base-300/40 last:border-b-0 ${
-                                onRowClick
+                                handleRowClick
                                     ? 'cursor-pointer hover:bg-base-200/60 focus:bg-base-200/60 focus:outline-2 focus:outline-primary'
                                     : ''
                             }`}
                         >
+                            {hasBulk && (
+                                <td className="px-4 py-3 align-middle" onClick={(e) => e.stopPropagation()}>
+                                    <input
+                                        type="checkbox"
+                                        checked={row.id !== undefined && selectedIds.has(row.id)}
+                                        onChange={() => row.id !== undefined && toggleOne(row.id)}
+                                        aria-label={`Select row ${row.id ?? idx}`}
+                                    />
+                                </td>
+                            )}
                             {columns.map((col) => (
                                 <td
                                     key={col.key}
@@ -464,6 +815,28 @@ export function DataTable<T extends { id?: string | number }>({
                                         : ((row as Record<string, ReactNode>)[col.key] ?? null)}
                                 </td>
                             ))}
+                            {hasActions && (
+                                <td className="px-4 py-3 text-right align-middle" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center justify-end gap-1">
+                                        {rowActions.map((action) => {
+                                            const disabled = action.disabled?.(row) === true;
+                                            return (
+                                                <button
+                                                    key={action.key}
+                                                    type="button"
+                                                    onClick={() => !disabled && action.onSelect(row)}
+                                                    disabled={disabled}
+                                                    className="rounded-md p-1.5 text-base-content/60 hover:bg-base-200 hover:text-base-content disabled:opacity-40"
+                                                    aria-label={action.label}
+                                                    title={action.label}
+                                                >
+                                                    {action.icon ?? action.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </td>
+                            )}
                         </tr>
                     ))}
                 </tbody>
@@ -611,8 +984,14 @@ export function CommandPalette({
 
     if (!open) return null;
 
-    const filtered = query
-        ? items.filter((it) => it.label.toLowerCase().includes(query.toLowerCase()))
+    // `keystone.admin.commandPalette.search` — plugins can rewrite the
+    // typed query before it's matched against item labels (add fuzzy
+    // matching, expand shorthand, redirect certain prefixes). Args:
+    // `(string, { items })`. Empty string is passed through so a plugin
+    // can also inject a default-visible slice by returning a stub query.
+    const rewritten = applyFilters<string>('keystone.admin.commandPalette.search', query, { items });
+    const filtered = rewritten
+        ? items.filter((it) => it.label.toLowerCase().includes(rewritten.toLowerCase()))
         : items;
 
     return (
@@ -625,7 +1004,7 @@ export function CommandPalette({
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center gap-3 border-b border-base-300/60 px-4 py-3">
-                    <span className="text-base-content/45">{Icon.search}</span>
+                    <span className="text-base-content/60">{Icon.search}</span>
                     <input
                         ref={inputRef}
                         type="text"
@@ -640,7 +1019,7 @@ export function CommandPalette({
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto py-1">
                     {filtered.length === 0 ? (
-                        <div className="px-4 py-8 text-center text-sm text-base-content/55">
+                        <div className="px-4 py-8 text-center text-sm text-base-content/70">
                             No matches for &quot;{query}&quot;.
                         </div>
                     ) : (
@@ -658,14 +1037,14 @@ export function CommandPalette({
                                     {it.icon}
                                 </span>
                                 <span className="flex-1 text-base-content">{it.label}</span>
-                                <span className="rounded border border-base-300/60 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-base-content/55">
+                                <span className="rounded border border-base-300/60 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-base-content/70">
                                     {it.kind}
                                 </span>
                             </button>
                         ))
                     )}
                 </div>
-                <div className="flex items-center justify-between border-t border-base-300/60 bg-base-200/40 px-4 py-2 text-[11px] text-base-content/55">
+                <div className="flex items-center justify-between border-t border-base-300/60 bg-base-200/40 px-4 py-2 text-[11px] text-base-content/70">
                     <span>Click a result · ESC to close</span>
                     <span className="font-mono">{filtered.length} results</span>
                 </div>

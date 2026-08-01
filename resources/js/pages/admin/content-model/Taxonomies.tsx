@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Card, EmptyState, PageHeader } from '@/components/admin/keystone';
 import {
@@ -141,24 +142,33 @@ export default function Taxonomies() {
                                 </div>
                                 {row.description ? <div className="text-sm text-base-content/65">{row.description}</div> : null}
                                 <div className="mt-auto flex flex-wrap items-center gap-2">
-                                    {row.is_editable ? (
-                                        <>
-                                            <Link
-                                                href={taxonomyEdit(row.slug).url}
-                                                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200"
-                                            >
-                                                Edit
-                                            </Link>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleDelete(row)}
-                                                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200"
-                                            >
-                                                Delete
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <span className="text-xs text-base-content/50">Registered in code</span>
+                                    {applyFilters<ReactNode>(
+                                        // Route the trailing action row through
+                                        // `.taxonomies.actions` so a plugin can
+                                        // add extra affordances (e.g. "Rebuild
+                                        // term index", "Export as CSV").
+                                        // Args: `(ReactNode, { taxonomy })`.
+                                        'keystone.admin.taxonomies.actions',
+                                        row.is_editable ? (
+                                            <>
+                                                <Link
+                                                    href={taxonomyEdit(row.slug).url}
+                                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200"
+                                                >
+                                                    Edit
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDelete(row)}
+                                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-xs font-semibold text-base-content/75 hover:bg-base-200"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <span className="text-xs text-base-content/50">Registered in code</span>
+                                        ),
+                                        { taxonomy: row },
                                     )}
                                 </div>
                             </Card>

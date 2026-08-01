@@ -1,4 +1,5 @@
-import type { ComponentType } from 'react';
+import { createElement, type ComponentType, type ReactNode } from 'react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import type { CustomFieldEditorProps, CustomFieldRecord } from './types';
 import { FieldShell } from './FieldShell';
 
@@ -80,19 +81,73 @@ export function CustomFieldRenderer({
     error?: string;
     onChange: (value: unknown) => void;
 }) {
+    // `keystone.admin.customFields.registerType` — resolves a field-type
+    // slug (built-in cases like `text`, `image`, OR a plugin's
+    // `editor_component` identifier) to a React editor component.
+    // Callbacks receive the currently-resolved component (or `undefined`
+    // when the field type is unknown) plus the field record, and return
+    // the component they want mounted. Runs on every render so a plugin
+    // bundle registered mid-session picks up on the next commit — the
+    // filter itself is the resolution primitive, so plugins don't need
+    // to reach into a private registry to introduce a new type.
+    // Args: `(ComponentType | undefined, { field, type, source })` where
+    // `source` is `'custom'`, `'builtin'`, or `'unknown'` — subscribers
+    // can decide whether to shadow a built-in or only fill the unknown
+    // gap.
     const custom = field.editor_component ? CUSTOM_EDITORS[field.editor_component] : undefined;
-    if (custom) {
-        const Custom = custom;
-        return <Custom field={field} value={value} error={error} onChange={onChange} />;
-    }
-
     const builtin = BUILTIN_EDITORS[field.type];
-    if (builtin) {
-        const Builtin = builtin;
-        return <Builtin field={field} value={value} error={error} onChange={onChange} />;
-    }
+    const initial = custom ?? builtin;
+    const source: 'custom' | 'builtin' | 'unknown' = custom
+        ? 'custom'
+        : builtin
+            ? 'builtin'
+            : 'unknown';
+    // `Resolved` is a stable component reference resolved through the
+    // filter chain, NOT a component constructed here — subscribers
+    // register their component at module scope and the filter returns
+    // that same reference on every call.
+    const Resolved = applyFilters<ComponentType<CustomFieldEditorProps> | undefined>(
+        'keystone.admin.customFields.registerType',
+        initial,
+        { field, type: field.editor_component ?? field.type, source },
+    );
 
-    return <UnknownFieldFallback field={field} value={value} error={error} onChange={onChange} />;
+    // `.customFields.validate` — filters the per-field error string
+    // before it's passed down to the editor. Plugins can inject a
+    // client-side validation message (or clear one) without waiting for
+    // the server round-trip. Args: `(string | undefined, { field, value })`;
+    // return `undefined` to clear.
+    const filteredError = applyFilters<string | undefined>(
+        'keystone.admin.customFields.validate',
+        error,
+        { field, value },
+    );
+
+    const rendered: ReactNode = Resolved
+        ? createElement(Resolved, {
+            field,
+            value,
+            error: filteredError,
+            onChange,
+        })
+        : (
+            <UnknownFieldFallback
+                field={field}
+                value={value}
+                error={filteredError}
+                onChange={onChange}
+            />
+        );
+
+    // `.customFields.render` — final wrapper over every field editor.
+    // Plugins can decorate (add a help chip, wrap in a permission gate)
+    // or replace the rendered node outright. Args:
+    // `(ReactNode, { field, value, error })`.
+    return applyFilters<ReactNode>(
+        'keystone.admin.customFields.render',
+        rendered,
+        { field, value, error: filteredError },
+    );
 }
 
 function UnknownFieldFallback({ field, value, error, onChange }: CustomFieldEditorProps) {

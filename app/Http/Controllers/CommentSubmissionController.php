@@ -41,6 +41,8 @@ class CommentSubmissionController extends Controller
     public function store(Request $request): RedirectResponse
     {
         if (! (bool) $this->settings->getSetting('discussion.comments')) {
+            doAction('keystone.admin.comments.rejected', 'commentsClosed', $request);
+
             return back()->with('comment_error', 'Comments are closed.');
         }
 
@@ -73,12 +75,16 @@ class CommentSubmissionController extends Controller
             ->first();
 
         if (null === $post) {
+            doAction('keystone.admin.comments.rejected', 'postNotVisible', $request);
+
             return back()->with('comment_error', 'That post is no longer accepting comments.');
         }
 
         $user = $request->user();
 
         if ((bool) $this->settings->getSetting('discussion.requireRegistration') && null === $user) {
+            doAction('keystone.admin.comments.rejected', 'registrationRequired', $request);
+
             return back()->with('comment_error', 'You must be signed in to comment.');
         }
 
@@ -93,6 +99,8 @@ class CommentSubmissionController extends Controller
             $verified = (bool) applyFilters('comments.captcha.verify', true, $request);
 
             if (! $verified) {
+                doAction('keystone.admin.comments.rejected', 'captchaFailed', $request);
+
                 return back()->with('comment_error', 'CAPTCHA verification failed. Please try again.');
             }
         }
@@ -110,6 +118,8 @@ class CommentSubmissionController extends Controller
                 ->first();
 
             if (null === $parent) {
+                doAction('keystone.admin.comments.rejected', 'crossPostReply', $request);
+
                 return back()->with('comment_error', 'That comment thread is no longer available.');
             }
 
@@ -122,6 +132,8 @@ class CommentSubmissionController extends Controller
         // consequence of a false positive is only a friendly bounce.
         $linkLimit = (int) $this->settings->getSetting('discussion.limitLinks');
         if ($linkLimit > 0 && self::countLinks($data['content']) > $linkLimit) {
+            doAction('keystone.admin.comments.rejected', 'linkLimit', $request);
+
             return back()->with('comment_error', 'That comment has too many links.');
         }
 
@@ -155,7 +167,7 @@ class CommentSubmissionController extends Controller
         // get a single override point regardless of which controller
         // is doing the persist.
         $status = function_exists('applyFilters')
-            ? (string) applyFilters('comments.store.defaultStatus', $defaultStatus, $request)
+            ? (string) applyFilters('ap.cmsFramework.comments.store.defaultStatus', $defaultStatus, $request)
             : $defaultStatus;
 
         // A banned-words match must never be silently upgraded by a
@@ -165,7 +177,7 @@ class CommentSubmissionController extends Controller
             $status = Comment::STATUS_SPAM;
         }
 
-        Comment::create([
+        $comment = Comment::create([
             'post_id'      => $post->id,
             'parent_id'    => $parentId,
             'user_id'      => $user?->getAuthIdentifier(),
@@ -176,6 +188,24 @@ class CommentSubmissionController extends Controller
             'status'       => $status,
             'approved_at'  => Comment::STATUS_APPROVED === $status ? now() : null,
         ]);
+
+        // Base "a comment was created" signal for subscribers that want
+        // every submission regardless of moderation outcome; the
+        // status-specific hook fires immediately after so a subscriber
+        // that only cares about, say, spam doesn't need to inspect
+        // `$comment->status` itself. Branch on the persisted status
+        // rather than `$bannedMatch` so a spam-classifying filter that
+        // returns STATUS_SPAM without a banned-words hit still lands on
+        // `.markedSpam` — the fired hook must match what actually got
+        // written.
+        doAction('keystone.admin.comments.created', $comment);
+        if (Comment::STATUS_SPAM === $status) {
+            doAction('keystone.admin.comments.markedSpam', $comment);
+        } elseif (Comment::STATUS_APPROVED === $status) {
+            doAction('keystone.admin.comments.approved', $comment);
+        } else {
+            doAction('keystone.admin.comments.awaitingModeration', $comment);
+        }
 
         $message = Comment::STATUS_APPROVED === $status
             ? 'Comment posted.'

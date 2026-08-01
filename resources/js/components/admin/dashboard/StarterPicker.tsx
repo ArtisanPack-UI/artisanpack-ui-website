@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { router } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import { Card } from '@/components/admin/keystone';
 import { applyStarter } from '@/routes/admin/dashboards';
 import type { AvailableWidgets, DashboardStarter } from '@/types/keystone';
@@ -25,6 +26,21 @@ interface StarterPickerProps {
 export function StarterPicker({ dashboardSlug, starters, availableWidgets }: StarterPickerProps) {
     const [dismissed, setDismissed] = useState(false);
     const [pendingSlug, setPendingSlug] = useState<string | null>(null);
+
+    // Filter the starter catalog before it's rendered so a plugin can
+    // append a template of its own (e.g. a Blog Starter with three
+    // sample widgets), hide a shipped one, or reorder them. Args:
+    // `(DashboardStarter[], { dashboardSlug })`. Rewriting the list to
+    // empty is legal — the picker will still render the "Start blank"
+    // card so the user has an escape hatch.
+    const filteredStarters = useMemo(
+        () => applyFilters<DashboardStarter[]>(
+            'keystone.admin.dashboard.starters',
+            starters,
+            { dashboardSlug },
+        ),
+        [starters, dashboardSlug],
+    );
 
     if (dismissed) {
         return <BlankPlaceholder />;
@@ -62,7 +78,7 @@ export function StarterPicker({ dashboardSlug, starters, availableWidgets }: Sta
             </header>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {starters.map((starter) => (
+                {filteredStarters.map((starter: DashboardStarter) => (
                     <StarterCard
                         key={starter.slug}
                         starter={starter}

@@ -8,6 +8,7 @@ use App\Exceptions\PluginUpdateUrlRejectedException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\PluginUploadRequest;
 use App\Services\Plugins\PluginUpdateUrlGuard;
+use App\Support\Hooks;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
@@ -92,6 +93,14 @@ class PluginController extends Controller
             return back()->withErrors(['slug' => __('Failed to activate plugin.')]);
         }
 
+        // A newly-active plugin can register routes / view composers /
+        // block renderers that change public HTML; signal downstream edge
+        // caches to purge so visitors don't see the pre-activation output.
+        Hooks::safeDoAction('keystone.cache.purgeRequested', [
+            'scope' => 'plugin',
+            'tags'  => ['plugin:'.$slug],
+        ]);
+
         return redirect()
             ->route('admin.system.plugins.index')
             ->with('success', __('Plugin activated.'));
@@ -104,6 +113,11 @@ class PluginController extends Controller
         } catch (PluginNotFoundException $e) {
             return back()->withErrors(['slug' => $e->getMessage()]);
         }
+
+        Hooks::safeDoAction('keystone.cache.purgeRequested', [
+            'scope' => 'plugin',
+            'tags'  => ['plugin:'.$slug],
+        ]);
 
         return redirect()
             ->route('admin.system.plugins.index')
@@ -137,6 +151,11 @@ class PluginController extends Controller
         if (! $applied) {
             return back()->with('warning', __('No update available for this plugin.'));
         }
+
+        Hooks::safeDoAction('keystone.cache.purgeRequested', [
+            'scope' => 'plugin',
+            'tags'  => ['plugin:'.$slug],
+        ]);
 
         return redirect()
             ->route('admin.system.plugins.index')
@@ -186,7 +205,15 @@ class PluginController extends Controller
             // path — but this action is exactly the point where the
             // admin is asking for a fresh probe. Evict first so we
             // actually hit the network.
-            Cache::forget("plugin.update.{$plugin->slug}");
+            $cacheKey = "plugin.update.{$plugin->slug}";
+            Cache::forget($cacheKey);
+
+            // Wrapped: a throwing subscriber here sits inside the
+            // per-plugin loop below, so an escape would abort every
+            // remaining plugin's update probe. Emit through
+            // `safeDoAction` to keep the refresh action's per-plugin
+            // fault isolation intact.
+            Hooks::safeDoAction('keystone.cache.forgotten', $cacheKey);
 
             try {
                 $this->updateManager->checkPluginUpdate($plugin->slug);
@@ -198,7 +225,21 @@ class PluginController extends Controller
                 // of silently blending into "checked".
                 $failed++;
                 report($e);
+
+                Hooks::safeDoAction('keystone.admin.plugins.updateCheckFailed', $plugin->slug, $e);
+
+                continue;
             }
+
+            // Emit the completed hook OUTSIDE the probe try/catch so a
+            // throwing subscriber can't be misclassified as an update-
+            // check failure. `safeDoAction` isolates the subscriber
+            // from the surrounding per-plugin loop.
+            Hooks::safeDoAction(
+                'keystone.admin.plugins.updateCheckCompleted',
+                $plugin->slug,
+                Cache::get($cacheKey),
+            );
         }
 
         return redirect()

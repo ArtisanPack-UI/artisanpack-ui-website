@@ -24,6 +24,7 @@
         "sync:visual-editor": "node scripts/sync-visual-editor.mjs"
     },
     "dependencies": {
+        "@artisanpack-ui/hooks-js": "^1.0.0",
         "@artisanpack-ui/performance": "file:vendor/artisanpack-ui/performance",
         "@artisanpack-ui/privacy": "file:vendor/artisanpack-ui/privacy",
         "@artisanpack-ui/react": "^1.0.0",

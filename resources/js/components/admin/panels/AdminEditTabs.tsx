@@ -1,4 +1,5 @@
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import type { ContentEditEntry } from './types';
 
 /**
@@ -22,7 +23,17 @@ export function AdminEditTabs({
     entries: ContentEditEntry[];
     render: (entry: ContentEditEntry) => ReactNode;
 }) {
-    const [activeSlug, setActiveSlug] = useState<string>(entries[0]?.slug ?? '');
+    // `keystone.admin.tabs.active` filter — resolves the initially-active
+    // tab slug so a plugin can restore per-user tab memory (a hint from
+    // localStorage, a query-param deep link, a per-role default). Runs once
+    // per mount; runtime tab clicks flow through `setActiveSlug` and are
+    // NOT re-filtered so a plugin can't fight the user's click. Args:
+    // `(slug, { entries })`. Return a slug not present in `entries` and
+    // the fallback lookup below drops it back to index 0.
+    const [activeSlug, setActiveSlug] = useState<string>(() => {
+        const fallback = entries[0]?.slug ?? '';
+        return applyFilters<string>('keystone.admin.tabs.active', fallback, { entries });
+    });
     const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
     if (entries.length === 0) {

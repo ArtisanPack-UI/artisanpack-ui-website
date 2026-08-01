@@ -9,9 +9,15 @@ import {
     StatusBadge,
     type Tone,
 } from '@/components/admin/keystone';
+import {
+    AddContentModal,
+    type AddContentModalOption,
+} from '@/components/admin/AddContentModal';
+import { useAddContentModal } from '@/lib/admin/useAddContentModal';
 import { useDateFormatter } from '@/lib/dateFormat';
+import { keystoneConfirm } from '@/lib/admin/confirm';
 import type { PostRow } from '@/types/keystone';
-import { create, destroy, duplicate, edit } from '@/routes/admin/posts';
+import { destroy, duplicate, edit } from '@/routes/admin/posts';
 
 const statusTone: Record<PostRow['status'], Tone> = {
     published: 'success',
@@ -26,18 +32,31 @@ interface CategoryOption {
     label: string;
 }
 
+interface NewContentPayload {
+    label: string;
+    hierarchical: boolean;
+    parentOptions: AddContentModalOption[];
+    templates: AddContentModalOption[];
+    quickCreateUrl: string;
+}
+
 interface PageProps {
     posts: PostRow[];
     categories: CategoryOption[];
+    newContent: NewContentPayload;
     flash?: { success?: string; error?: string };
     [key: string]: unknown;
 }
 
 export default function Index() {
-    const { posts, flash } = usePage<PageProps>().props;
+    const { posts, newContent, flash } = usePage<PageProps>().props;
     const { formatDate } = useDateFormatter();
     const [query, setQuery] = useState('');
     const [tab, setTab] = useState<Tab>('all');
+    // #184 — landing from a "New post" menu link auto-opens the modal
+    // (via `?new=1`); the hook also strips the parameter on close so a
+    // reload or a Back doesn't reopen a dismissed dialog.
+    const { open: modalOpen, openModal, closeModal } = useAddContentModal();
 
     const filtered = posts.filter((p) => {
         if (tab !== 'all' && p.status !== tab) return false;
@@ -71,7 +90,7 @@ export default function Index() {
     }
 
     function handleDelete(post: PostRow) {
-        if (!confirm(`Delete "${post.title}"? This cannot be undone.`)) return;
+        if (!keystoneConfirm(`Delete "${post.title}"? This cannot be undone.`)) return;
         router.delete(destroy(post.id).url, { preserveScroll: true });
     }
 
@@ -83,23 +102,46 @@ export default function Index() {
                     title="Blog Posts"
                     description="Write and publish posts to your blog."
                     actions={
-                        <Link
-                            href={create().url}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90"
+                        <button
+                            id="new-content-trigger"
+                            type="button"
+                            onClick={openModal}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:outline-none"
                         >
                             {Icon.plus}
                             New post
-                        </Link>
+                        </button>
                     }
                 />
 
+                <AddContentModal
+                    open={modalOpen}
+                    onClose={closeModal}
+                    label={newContent.label}
+                    hierarchical={newContent.hierarchical}
+                    parentOptions={newContent.parentOptions}
+                    templates={newContent.templates}
+                    quickCreateUrl={newContent.quickCreateUrl}
+                />
+
                 {flash?.success && (
-                    <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
+                    <div
+                        /*
+                         * `role="status"` — the save confirmation is the
+                         * single most important state change on this screen
+                         * and it was landing silently. The node is inserted
+                         * fresh by the Inertia visit, which is what a polite
+                         * live region announces.
+                         */
+                        role="status"
+                        className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
                         {flash.success}
                     </div>
                 )}
                 {flash?.error && (
-                    <div className="rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error">
+                    <div
+                        role="alert"
+                        className="rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error">
                         {flash.error}
                     </div>
                 )}
@@ -126,7 +168,7 @@ export default function Index() {
                             ))}
                         </div>
                         <div className="relative flex-1 max-w-xs">
-                            <span className="pointer-events-none absolute top-2 left-2.5 text-base-content/45">
+                            <span className="pointer-events-none absolute top-2 left-2.5 text-base-content/60">
                                 {Icon.search}
                             </span>
                             <input
@@ -140,6 +182,7 @@ export default function Index() {
                     </div>
 
                     <DataTable<PostRow>
+                        resource="posts"
                         columns={[
                             {
                                 key: 'title',
@@ -152,7 +195,7 @@ export default function Index() {
                                         >
                                             {r.title}
                                         </Link>
-                                        <div className="font-mono text-[11px] text-base-content/55">
+                                        <div className="font-mono text-[11px] text-base-content/70">
                                             {r.permalink}
                                         </div>
                                     </div>
@@ -241,7 +284,7 @@ function RowAction({
             : 'hover:bg-base-200 hover:text-base-content';
 
     const className =
-        'group relative grid h-7 w-7 place-items-center rounded-md text-base-content/55 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
+        'group relative grid h-7 w-7 place-items-center rounded-md text-base-content/70 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
         toneClass;
 
     const inner = (

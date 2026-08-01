@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Head, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import {
     Card,
@@ -31,6 +32,18 @@ const roleTone: Record<string, Tone> = {
 export default function Index() {
     const { permissions } = usePage<PageProps>().props;
 
+    // Filter the permissions table's row list before it's rendered.
+    // The `.list.rows` filter that DataTable applies is generic across
+    // every resource; this page-specific `.permissions.rows` runs
+    // FIRST so a plugin can add plugin-owned permissions (for a plugin
+    // that seeded its own rows without registering them in the
+    // server-side registry yet) or hide seeded rows a plugin has
+    // deprecated. Args: `(PermissionRow[])`.
+    const filteredPermissions = useMemo(
+        () => applyFilters<PermissionRow[]>('keystone.admin.permissions.rows', permissions),
+        [permissions],
+    );
+
     return (
         <>
             <Head title="Permissions" />
@@ -43,6 +56,7 @@ export default function Index() {
 
                 <Card padded={false}>
                     <DataTable<PermissionRow>
+                        resource="permissions"
                         columns={[
                             {
                                 key: 'name',
@@ -79,7 +93,7 @@ export default function Index() {
                                     ),
                             },
                         ]}
-                        rows={permissions}
+                        rows={filteredPermissions}
                     />
                 </Card>
             </div>

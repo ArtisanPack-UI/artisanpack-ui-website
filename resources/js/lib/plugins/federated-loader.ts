@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { doAction } from '@artisanpack-ui/hooks-js';
 
 /**
  * Runtime loader for plugin-supplied React pages shipped as Module Federation
@@ -26,8 +27,19 @@ export type FederatedModuleEntry = {
     module: string;
 };
 
-/** The full federated-module manifest, keyed by Inertia page name. */
-export type FederatedModuleManifest = Record<string, FederatedModuleEntry>;
+/** Page-keyed lookup consumed by the Inertia resolver. */
+export type FederatedPageManifest = Record<string, FederatedModuleEntry>;
+
+/**
+ * The full federated-module manifest the server shares as an Inertia prop.
+ * `pages` powers page resolution; `bootModules` is preloaded before the
+ * first admin page mounts so plugin-registered actions/filters bind before
+ * the shell reads them.
+ */
+export type FederatedModuleManifest = {
+    pages: FederatedPageManifest;
+    bootModules: FederatedModuleEntry[];
+};
 
 type FederationRuntime = {
     __federation_method_setRemote: (
@@ -183,6 +195,60 @@ function normalisePageModule(module: unknown): {
 
     throw new PluginPageLoadError(
         'Plugin page module did not export a React component as its default export.',
+    );
+}
+
+/**
+ * Preload every plugin's `bootModule` (from the shared federated-modules
+ * manifest) so the boot modules' top-level side effects — typically
+ * `addAction` / `addFilter` calls that bind plugin hooks against the
+ * host's shared `@artisanpack-ui/hooks-js` singleton — run BEFORE the
+ * admin shell mounts its first page and calls `applyFilters`. Without
+ * this preload, a plugin's `keystone.admin.navGroups` filter callback
+ * would attach after the sidebar has already computed its groups, so
+ * the plugin's nav additions wouldn't appear until the next render.
+ *
+ * Failures are isolated per boot module: we `console.warn` and keep
+ * going so a single broken plugin can't block the admin shell from
+ * mounting. The federation runtime handles remote registration
+ * internally via {@link ensureRemoteRegistered}, and this function
+ * intentionally awaits each `__federation_method_getRemote` call so
+ * the side effects have committed by the time the promise resolves.
+ *
+ * Idempotent — boot modules share the same page cache, so a second call
+ * with the same entries is essentially a no-op.
+ */
+export async function preloadFederatedBootModules(
+    entries: readonly FederatedModuleEntry[],
+): Promise<void> {
+    if (0 === entries.length) {
+        return;
+    }
+
+    await Promise.all(
+        entries.map(async (entry) => {
+            try {
+                const runtime = await ensureRemoteRegistered(entry);
+                await runtime.__federation_method_getRemote(entry.remote, entry.module);
+            } catch (error) {
+                console.warn(
+                    `[keystone] Failed to preload boot module \`${entry.module}\` from plugin \`${entry.remote}\`.`,
+                    error,
+                );
+                // Broadcast to `keystone.admin.error.boundary` so error-
+                // tracking plugins (Sentry, Bugsnag) can pick up preload
+                // failures — the console warning alone gives no signal to
+                // the shell that a plugin failed to bind its filters.
+                // Scope `bootModule` distinguishes these from render-time
+                // plugin/panel boundary failures.
+                doAction('keystone.admin.error.boundary', {
+                    scope: 'bootModule',
+                    error: error instanceof Error ? error : new Error(String(error)),
+                    pluginName: entry.remote,
+                    module:     entry.module,
+                });
+            }
+        }),
     );
 }
 

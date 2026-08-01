@@ -7,20 +7,25 @@ namespace App\Http\Controllers\Admin\ContentModel;
 use App\Http\Controllers\Controller;
 use App\Models\DynamicContentTerm;
 use App\Support\ContentModel\SpecializedContentTypes;
+use App\Support\Media\ImageMediaRule;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\TaxonomyManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Taxonomy;
 use ArtisanPackUI\MediaLibrary\Models\Media;
+use Carbon\CarbonInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 /**
  * Generic admin CRUD for records of any registered content type
@@ -42,6 +47,9 @@ use Inertia\Response;
  */
 class ContentTypeContentController extends Controller
 {
+    /** Records per page on the dynamic-content index. */
+    private const RECORDS_PER_PAGE = 50;
+
     public function __construct(
         private readonly ContentTypeManager $manager,
         private readonly TaxonomyManager $taxonomyManager,
@@ -49,36 +57,77 @@ class ContentTypeContentController extends Controller
 
     public function index(string $contentType): Response
     {
-        $type = $this->resolve($contentType);
+        $type    = $this->resolve($contentType);
+        $records = $this->recordsPayload($type);
 
         return Inertia::render('admin/content-model/DynamicContentIndex', [
             'contentType' => $this->contentTypeSummary($type),
-            'records'     => $this->recordsPayload($type),
+            'records'     => $records['data'],
+            'pagination'  => $records['pagination'],
             'fields'      => $this->fieldsPayload($type),
+            'newContent'  => [
+                'label'          => strtolower(Str::singular($type->name)),
+                'hierarchical'   => (bool) ($type->hierarchical ?? false),
+                'parentOptions'  => $this->parentOptionsFor($type),
+                'templates'      => [],
+                'quickCreateUrl' => route('admin.content.quick-create', ['contentType' => $type->slug]),
+            ],
         ]);
     }
 
-    public function create(Request $request, string $contentType): RedirectResponse
+    /**
+     * Quick-create endpoint for the Add New modal (#184). Writes a
+     * minimal row using the user-supplied title (+ optional parent for
+     * hierarchical types), then redirects to Edit so the visual editor
+     * mounts against a real record. Replaces the old auto-draft
+     * "Untitled …" stub.
+     */
+    public function quickCreate(Request $request, string $contentType): RedirectResponse
     {
         $type = $this->resolve($contentType);
 
-        // Auto-draft: create a stub row and redirect to edit so the
-        // visual editor mounts immediately. Same pattern PostController
-        // and PageController use — an empty new-record screen is a
-        // dead end when the whole point is the block editor.
-        abort_unless(Schema::hasTable($type->table_name), 500, sprintf('Records table "%s" does not exist.', $type->table_name));
+        // Mirror `store()` — an editor can reach the modal for a type
+        // whose migration hasn't run yet (the Index page auto-opens
+        // the modal on `?new=1` unconditionally), so return the same
+        // Laravel-shaped error the modal surfaces inline rather than
+        // aborting with a raw 500 the Inertia error overlay would catch.
+        if (! Schema::hasTable($type->table_name)) {
+            return back()->withInput()->withErrors([
+                'title' => __('Content type ":slug" has no records table — run the pending migration first.', ['slug' => $type->slug]),
+            ]);
+        }
 
-        $data = ['title' => 'Untitled '.Str::singular($type->name)];
+        $rules = ['title' => ['required', 'string', 'max:255']];
+
+        $hierarchical = (bool) ($type->hierarchical ?? false)
+            && Schema::hasColumn($type->table_name, 'parent_id');
+
+        if ($hierarchical) {
+            $rules['parent_id'] = [
+                'nullable',
+                'integer',
+                \Illuminate\Validation\Rule::exists($type->table_name, 'id'),
+            ];
+        }
+
+        $validated = $request->validate($rules);
+
+        $data = ['title' => $validated['title']];
+
         if (Schema::hasColumn($type->table_name, 'status')) {
             $data['status'] = 'draft';
         }
         if (Schema::hasColumn($type->table_name, 'author_id')) {
             $data['author_id'] = $request->user()?->id;
         }
-        $data['created_at'] = now();
-        $data['updated_at'] = now();
+        if ($hierarchical) {
+            $data['parent_id'] = $validated['parent_id'] ?? null;
+        }
+        $data = $data + $this->timestampColumns($type->table_name);
 
         $id = DB::table($type->table_name)->insertGetId($data);
+
+        $this->emitRecordCreated($type->slug, $data, $id);
 
         return redirect()->route('admin.content.edit', [
             'contentType' => $type->slug,
@@ -86,11 +135,14 @@ class ContentTypeContentController extends Controller
         ]);
     }
 
+    /**
+     * Full-form record write for content types with custom fields — the
+     * generic edit form POSTs here. The Add-New modal uses the leaner
+     * {@see quickCreate()} path; both share the missing-table guard and
+     * the emit-created-hook tail.
+     */
     public function store(Request $request, string $contentType): RedirectResponse
     {
-        // With auto-draft in place the create flow always lands on
-        // edit; `store` stays here to catch stray POSTs and route them
-        // through the same edit-shaped update path.
         $type = $this->resolve($contentType);
 
         if (! Schema::hasTable($type->table_name)) {
@@ -99,12 +151,12 @@ class ContentTypeContentController extends Controller
             ]);
         }
 
-        $data = $this->validatedRecord($request, $this->fieldModels($type), $type);
+        $data = $this->validatedRecord($request, $this->fieldModels($type), $type, creating: true);
 
-        DB::table($type->table_name)->insert($data + [
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $data = $data + $this->timestampColumns($type->table_name);
+        $id   = DB::table($type->table_name)->insertGetId($data);
+
+        $this->emitRecordCreated($type->slug, $data, $id);
 
         return redirect()
             ->route('admin.content.index', ['contentType' => $type->slug])
@@ -146,18 +198,43 @@ class ContentTypeContentController extends Controller
         // when the id is valid.
         abort_unless(DB::table($type->table_name)->where('id', $record)->exists(), 404);
 
-        $data = $this->validatedRecord($request, $this->fieldModels($type), $type);
+        $data = $this->validatedRecord($request, $this->fieldModels($type), $type, creating: false);
+
+        $hasStatusColumn = Schema::hasColumn($type->table_name, 'status');
 
         // Wrap column update + term sync in one transaction so a term-sync
         // failure doesn't leave saved metadata paired with stale
         // taxonomy assignments (both persist or neither does).
-        DB::transaction(function () use ($type, $record, $data, $request): void {
+        //
+        // The pre-save status snapshot is captured INSIDE the transaction
+        // under `lockForUpdate()` so a concurrent request can't flip the
+        // status between the read and our write — that race would
+        // otherwise cause `.record.published` to fire (or be suppressed)
+        // based on a stale prior value. Threaded back out via `$priorStatus`
+        // so the post-commit `.published` emit uses the locked value.
+        $priorStatus = null;
+
+        DB::transaction(function () use ($type, $record, $data, $request, $hasStatusColumn, &$priorStatus): void {
+            if ($hasStatusColumn) {
+                $priorStatus = (string) (DB::table($type->table_name)
+                    ->where('id', $record)
+                    ->lockForUpdate()
+                    ->value('status') ?? '');
+            }
+
             DB::table($type->table_name)
                 ->where('id', $record)
-                ->update($data + ['updated_at' => now()]);
+                ->update($data + Arr::only($this->timestampColumns($type->table_name), 'updated_at'));
 
             $this->syncTerms($type, $record, $request->input('term_ids', []));
         });
+
+        doAction('keystone.admin.contentTypes.record.updated', $type->slug, $data, $record);
+
+        $newStatus = (string) ($data['status'] ?? '');
+        if ('published' === $newStatus && 'published' !== $priorStatus) {
+            doAction('keystone.admin.contentTypes.record.published', $type->slug, $data, $record);
+        }
 
         return redirect()
             ->route('admin.content.edit', ['contentType' => $type->slug, 'record' => $record])
@@ -172,13 +249,55 @@ class ContentTypeContentController extends Controller
             return back()->withErrors(['id' => __('No records table for ":slug".', ['slug' => $type->slug])]);
         }
 
-        DB::transaction(function () use ($type, $record): void {
-            DB::table($type->table_name)->where('id', $record)->delete();
+        // Snapshot + delete atomically inside the transaction so a
+        // concurrent writer can't slip a new row in between the read
+        // and the delete. `lockForUpdate()` on the snapshot read holds
+        // a row-level lock until the transaction commits, so a
+        // concurrent DELETE can't drop the row between the read and
+        // our own DELETE — without the lock, `first()` is a
+        // non-locking read and the .record.deleted action would fire
+        // for a delete that touched zero rows. Also lets us bail out
+        // cleanly when the row is already gone.
+        $row     = null;
+        $deleted = 0;
+
+        DB::transaction(function () use ($type, $record, &$row, &$deleted): void {
+            $rowObject = DB::table($type->table_name)
+                ->where('id', $record)
+                ->lockForUpdate()
+                ->first();
+
+            if (null === $rowObject) {
+                return;
+            }
+
+            $row     = (array) $rowObject;
+            $deleted = DB::table($type->table_name)->where('id', $record)->delete();
+
             DB::table('keystone_dynamic_content_term_assignments')
                 ->where('content_type_slug', $type->slug)
                 ->where('record_id', $record)
                 ->delete();
         });
+
+        // Only fire the deletion event when the row actually went
+        // away under our lock. `$deleted === 0` here would indicate a
+        // driver quirk (SQLite lock escalation, MySQL isolation edge
+        // case) rather than a normal missing-row case — safer to
+        // surface it as a validation error than to emit a phantom
+        // event.
+        if (null === $row || 1 !== $deleted) {
+            return back()->withErrors(['id' => __('No record with id ":id" for ":slug".', [
+                'id'   => $record,
+                'slug' => $type->slug,
+            ])]);
+        }
+
+        // Fire after the transaction commits so a subscriber exception
+        // (or a transaction rollback) doesn't leave subscribers with a
+        // phantom "deleted" event; matches the FiresLifecycleHooks trait
+        // shape used for Post/Page.
+        doAction('keystone.admin.contentTypes.record.deleted', $type->slug, $row, $record);
 
         return redirect()
             ->route('admin.content.index', ['contentType' => $type->slug])
@@ -208,10 +327,12 @@ class ContentTypeContentController extends Controller
 
     /**
      * @param  Collection<int, CustomField>  $fields
+     * @param  bool  $creating  Distinguishes the INSERT path from the UPDATE
+     *                          path; only the former may default `author_id`.
      *
      * @return array<string, mixed>
      */
-    private function validatedRecord(Request $request, Collection $fields, ContentType $type): array
+    private function validatedRecord(Request $request, Collection $fields, ContentType $type, bool $creating): array
     {
         // NOTE: `content` is deliberately NOT written here. The visual
         // editor (#111) owns the `content` column and stores block JSON
@@ -224,16 +345,37 @@ class ContentTypeContentController extends Controller
             'status'            => ['nullable', \Illuminate\Validation\Rule::in(array_column($this->statusOptions(), 'value'))],
             'published_at'      => ['nullable', 'date'],
             'author_id'         => ['nullable', 'integer', \Illuminate\Validation\Rule::exists('users', 'id')],
-            'featured_image_id' => ['nullable', 'integer'],
+            'featured_image_id' => ImageMediaRule::nullable(),
         ];
         $data = [
-            'title'             => (string) $request->input('title', ''),
-            'excerpt'           => $request->input('excerpt'),
-            'status'            => $request->input('status'),
-            'published_at'      => $request->input('published_at'),
-            'author_id'         => $request->input('author_id'),
+            'title'   => (string) $request->input('title', ''),
+            'excerpt' => $request->input('excerpt'),
+            // `status` is validated `nullable`, but the column is NOT NULL
+            // with a `draft` default — and this array always carries the
+            // key, so a payload that omitted it wrote a literal NULL and
+            // 500'd on the constraint. Mirror the column default instead.
+            'status' => $this->normalizeStatus($request->input('status')),
+            // Normalized rather than inserted verbatim: this write goes
+            // through the query builder, so nothing casts it on the way
+            // in. `date` validation accepts `"next tuesday"` and ISO
+            // strings with a `Z` offset, both of which MySQL rejects in
+            // strict mode — and a value that *is* accepted still drifts
+            // from the Post/Page path, where Eloquent's date cast
+            // normalizes first.
+            'published_at'      => $this->normalizePublishedAt($request->input('published_at')),
             'featured_image_id' => $request->input('featured_image_id'),
         ];
+
+        // Attribution is a privileged edit. The bespoke Post/Page
+        // controllers never accept an author field at all, so leaving this
+        // generic path open let any editor stamp a record as authored by
+        // anyone. Editors get themselves on create and no say on update;
+        // admins and site owners can reassign freely.
+        if ($this->mayReassignAuthor($request)) {
+            $data['author_id'] = $request->input('author_id');
+        } elseif ($creating) {
+            $data['author_id'] = $request->user()?->id;
+        }
 
         foreach ($fields as $field) {
             $key         = 'values.'.$field->key;
@@ -255,7 +397,7 @@ class ContentTypeContentController extends Controller
         // `published_at` is nullable-timestamped, so publishing without
         // an explicit date auto-fills now(). Consistent with Post/Page.
         if (($data['status'] ?? null) === 'published' && empty($data['published_at'])) {
-            $data['published_at'] = now();
+            $data['published_at'] = now()->toDateTimeString();
         }
 
         // Return the full validated set (including explicit nulls and
@@ -263,6 +405,90 @@ class ContentTypeContentController extends Controller
         // featured images, and optional custom fields — array_filter'd
         // payloads silently retained the previous DB value.
         return $data;
+    }
+
+    /**
+     * `created_at` / `updated_at` values for a records table, but only for
+     * the ones that table actually has.
+     *
+     * Every other column on the write path is `Schema::hasColumn`-guarded
+     * because a content type's table is whatever `ensureRecordsTable()`
+     * provisioned for its `supports` set — or, for a type whose table was
+     * hand-migrated, whatever the author wrote. Timestamps were the two
+     * that assumed their way in, so a lean table without them failed the
+     * INSERT on an unknown column.
+     *
+     * @return array<string, Carbon>
+     */
+    private function timestampColumns(string $table): array
+    {
+        $now     = now();
+        $columns = [];
+
+        foreach (['created_at', 'updated_at'] as $column) {
+            if (Schema::hasColumn($table, $column)) {
+                $columns[$column] = $now;
+            }
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Whether the caller is allowed to set `author_id` to somebody else.
+     *
+     * The route group admits `admin`, `site_owner`, and `editor`; only the
+     * first two own attribution.
+     */
+    private function mayReassignAuthor(Request $request): bool
+    {
+        $user = $request->user();
+
+        if (null === $user || ! method_exists($user, 'hasRole')) {
+            return false;
+        }
+
+        return $user->hasRole('admin') || $user->hasRole('site_owner');
+    }
+
+    /**
+     * Coerce a submitted status to a value the NOT NULL column accepts,
+     * mirroring the `draft` default `ensureRecordsTable()` gives it.
+     */
+    private function normalizeStatus(mixed $value): string
+    {
+        $status = is_string($value) ? trim($value) : '';
+
+        return '' !== $status ? $status : 'draft';
+    }
+
+    /**
+     * Parse a submitted date into the app timezone and format it the way
+     * the datetime column expects, so the generic path stores exactly what
+     * the Eloquent-backed Post/Page path would.
+     *
+     * Validation has already run `date`, so a parse failure here means a
+     * format Carbon accepts but the driver won't — safer to store NULL (a
+     * legal value for the column) than to hand the driver a string it will
+     * reject with a 500.
+     */
+    private function normalizePublishedAt(mixed $value): ?string
+    {
+        if (null === $value || '' === $value) {
+            return null;
+        }
+
+        if ($value instanceof CarbonInterface) {
+            return $value->copy()->setTimezone(config('app.timezone'))->toDateTimeString();
+        }
+
+        try {
+            return Carbon::parse((string) $value)
+                ->setTimezone(config('app.timezone'))
+                ->toDateTimeString();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -542,6 +768,25 @@ class ContentTypeContentController extends Controller
     }
 
     /**
+     * Fire the `.record.created` action, plus `.record.published` when
+     * the initial write already puts the row in the published state
+     * (mirrors the framework's FiresLifecycleHooks trait). Shared by
+     * the two write paths — {@see quickCreate()} for the modal and
+     * {@see store()} for the full custom-fields form — so the emit
+     * logic isn't duplicated.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function emitRecordCreated(string $slug, array $data, int|string $id): void
+    {
+        doAction('keystone.admin.contentTypes.record.created', $slug, $data, $id);
+
+        if ('published' === (string) ($data['status'] ?? '')) {
+            doAction('keystone.admin.contentTypes.record.published', $slug, $data, $id);
+        }
+    }
+
+    /**
      * @return Collection<int, CustomField>
      */
     private function fieldModels(ContentType $type): Collection
@@ -580,23 +825,106 @@ class ContentTypeContentController extends Controller
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * Parent-picker options for a hierarchical content type. Returns an
+     * empty list when the type isn't hierarchical or the table lacks a
+     * `parent_id` column, so the modal can just render nothing for
+     * flat types.
+     *
+     * @return list<array{value: int, label: string}>
+     */
+    private function parentOptionsFor(ContentType $type): array
+    {
+        if (! (bool) ($type->hierarchical ?? false)) {
+            return [];
+        }
+
+        if (! Schema::hasTable($type->table_name) || ! Schema::hasColumn($type->table_name, 'parent_id')) {
+            return [];
+        }
+
+        // Bounded, unlike the index (which paginates): this feeds a native
+        // `<select>` in the Add New modal, and a picker with more than a
+        // few hundred options is unusable regardless of whether the data
+        // is all there. Making it workable at that scale means a
+        // type-ahead control, which is its own piece of work.
+        //
+        // A hierarchical CPT is not guaranteed to also carry a `title`
+        // column — the ContentTypes schema tracks the two flags
+        // independently. Fall back to id-only ordering and a `#<id>`
+        // label when `title` is absent so Index doesn't 500 on a lean
+        // hierarchical type.
+        $hasTitle = Schema::hasColumn($type->table_name, 'title');
+        $columns  = $hasTitle ? ['id', 'title'] : ['id'];
+
+        return DB::table($type->table_name)
+            ->orderBy($hasTitle ? 'title' : 'id')
+            ->limit(500)
+            ->get($columns)
+            ->map(fn ($row) => [
+                'value' => (int) $row->id,
+                'label' => $hasTitle && '' !== (string) ($row->title ?? '')
+                    ? (string) $row->title
+                    : '#'.$row->id,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * One page of records, plus the metadata the index needs to render
+     * page controls.
+     *
+     * Paginated rather than `limit(200)`: a truncated list looks exactly
+     * like a complete one, so record 201 and everything after it simply
+     * had no edit link anywhere in the admin. There is no "show all"
+     * escape hatch for the same reason the cap existed — the payload is
+     * serialized into the Inertia page prop.
+     *
+     * @return array{
+     *     data: list<array<string, mixed>>,
+     *     pagination: array{current_page: int, last_page: int, per_page: int, total: int, prev_url: string|null, next_url: string|null},
+     * }
      */
     private function recordsPayload(ContentType $type): array
     {
         if (! Schema::hasTable($type->table_name)) {
-            return [];
+            return [
+                'data'       => [],
+                'pagination' => [
+                    'current_page' => 1,
+                    'last_page'    => 1,
+                    'per_page'     => self::RECORDS_PER_PAGE,
+                    'total'        => 0,
+                    'prev_url'     => null,
+                    'next_url'     => null,
+                ],
+            ];
         }
 
-        // Mirror the edit-page allowlist so plugin-added sensitive
-        // columns (audit trails, encrypted secret refs, etc.) never
-        // reach the index Inertia payload either.
-        return DB::table($type->table_name)
+        $paginator = DB::table($type->table_name)
             ->orderByDesc('id')
-            ->limit(200)
-            ->get()
-            ->map(fn ($row) => $this->recordAllowlist((array) $row, $type))
-            ->all();
+            ->paginate(self::RECORDS_PER_PAGE)
+            // Keeps any future filter/search parameters on the page links
+            // instead of silently resetting them at the page boundary.
+            ->withQueryString();
+
+        return [
+            // Mirror the edit-page allowlist so plugin-added sensitive
+            // columns (audit trails, encrypted secret refs, etc.) never
+            // reach the index Inertia payload either.
+            'data' => array_map(
+                fn ($row) => $this->recordAllowlist((array) $row, $type),
+                $paginator->items(),
+            ),
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page'    => $paginator->lastPage(),
+                'per_page'     => $paginator->perPage(),
+                'total'        => $paginator->total(),
+                'prev_url'     => $paginator->previousPageUrl(),
+                'next_url'     => $paginator->nextPageUrl(),
+            ],
+        ];
     }
 
     /**

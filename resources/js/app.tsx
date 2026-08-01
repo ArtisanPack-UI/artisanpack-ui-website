@@ -1,4 +1,13 @@
+// The hooks-js side-effect import MUST come before any module that binds
+// actions or filters (widgets registry, plugin boot modules, admin shell
+// components). Importing here ensures the shared `ApHooks` singleton is
+// initialised on `globalThis` before anything else runs, so a plugin
+// bundle loaded via `<script>` or Module Federation can reach the same
+// registry the host itself uses.
+import '@artisanpack-ui/hooks-js';
+
 import { createInertiaApp, router } from '@inertiajs/react';
+import { applyFilters, doAction } from '@artisanpack-ui/hooks-js';
 import { createRoot, hydrateRoot } from 'react-dom/client';
 import { createElement, type ComponentType, type ReactNode } from 'react';
 import { ThemeProvider } from '@artisanpack-ui/react';
@@ -11,12 +20,18 @@ import '@/lib/admin/widgets';
 // for side-effects so the config runs once, before any admin fetch call site.
 import '@/lib/admin/progress';
 
+// Bridges Inertia router lifecycle events into the shared hooks bus
+// (`keystone.admin.router.start` / `.finish`). Side-effect import.
+import '@/lib/admin/hooks';
+
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { PluginErrorBoundary } from '@/components/plugins/PluginErrorBoundary';
 import {
     loadFederatedPage,
+    preloadFederatedBootModules,
     type FederatedModuleEntry,
     type FederatedModuleManifest,
+    type FederatedPageManifest,
 } from '@/lib/plugins/federated-loader';
 
 const fallbackAppName = import.meta.env.VITE_APP_NAME || 'Laravel';
@@ -46,20 +61,73 @@ function readInitialInertiaPage(): InitialPagePayload {
     }
 }
 
-const initialPage = readInitialInertiaPage();
-let appName        = initialPage.props?.name || fallbackAppName;
-let federatedIndex = initialPage.props?.keystone?.federatedModules ?? {};
+const initialPage       = readInitialInertiaPage();
+const initialManifest   = initialPage.props?.keystone?.federatedModules;
+let appName             = initialPage.props?.name || fallbackAppName;
+// #152 — `keystone.admin.plugins.federatedIndex` gives plugins a seam to
+// hide / rename / add entries in the federated page routing table before
+// Inertia's resolver reads it. Fires on both the initial page manifest
+// and every SPA navigation manifest so a subscriber only has to bind
+// once. Kept OUTSIDE the setter so the same subscriber chain is reused.
+function applyFederatedIndexFilter(
+    pages: FederatedPageManifest,
+    source: 'initial' | 'navigate',
+): FederatedPageManifest {
+    return applyFilters<FederatedPageManifest>(
+        'keystone.admin.plugins.federatedIndex',
+        pages,
+        { source },
+    );
+}
+// Start with the raw manifest so `bootAdminShell()` can preload
+// federated boot modules first and re-run the filter with plugin
+// subscribers bound before Inertia's `resolve` fires for the initial
+// page. Without the two-step, the filter would apply at module top
+// with an empty subscriber list and the first federated page render
+// would miss every plugin's rewrite.
+let federatedIndex: FederatedPageManifest = initialManifest?.pages ?? {};
 
 // Keep `federatedIndex` (and the document title source) in sync with the
 // manifest the server sends on every SPA navigation. Without this, a plugin
 // activated after the initial page load would be unreachable — `resolve`
 // closes over `federatedIndex` and would otherwise only ever see the
-// manifest captured at boot.
+// manifest captured at boot. A new plugin's boot module is also preloaded
+// on navigation so its hook callbacks bind before the next shell render.
+//
+// `preloadedBootKeys` is RECOMPUTED from the current manifest on every
+// navigation rather than monotonically growing. Otherwise a plugin that
+// was deactivated (removed from the manifest) and later re-activated
+// would still be treated as "already preloaded" — its entry key would
+// linger from the earlier session and skip the re-preload it needs.
+function bootModuleKey(entry: FederatedModuleEntry): string {
+    return `${entry.remote}::${entry.module}::${entry.entry}`;
+}
+let preloadedBootKeys = new Set<string>(
+    (initialManifest?.bootModules ?? []).map(bootModuleKey),
+);
+
 router.on('navigate', (event) => {
-    const detail = (event as unknown as { detail?: { page?: InitialPagePayload } }).detail;
-    const props  = detail?.page?.props;
-    if (props?.keystone?.federatedModules) {
-        federatedIndex = props.keystone.federatedModules;
+    const detail   = (event as unknown as { detail?: { page?: InitialPagePayload } }).detail;
+    const props    = detail?.page?.props;
+    const manifest = props?.keystone?.federatedModules;
+    if (manifest) {
+        federatedIndex = applyFederatedIndexFilter(manifest.pages, 'navigate');
+        // Fresh = present in the new manifest but not in the previous
+        // preloaded set. Reassign `preloadedBootKeys` to only what the
+        // new manifest declares so a re-activated plugin re-preloads.
+        const nextKeys = new Set<string>();
+        const fresh: FederatedModuleEntry[] = [];
+        for (const entry of manifest.bootModules) {
+            const key = bootModuleKey(entry);
+            nextKeys.add(key);
+            if (!preloadedBootKeys.has(key)) {
+                fresh.push(entry);
+            }
+        }
+        preloadedBootKeys = nextKeys;
+        if (fresh.length > 0) {
+            void preloadFederatedBootModules(fresh);
+        }
     }
     if (props?.name) {
         appName = props.name;
@@ -163,49 +231,106 @@ async function resolveFederatedPage(
     return wrapped;
 }
 
-createInertiaApp({
-    title: (title) => (title ? `${title} - ${appName}` : appName),
-    resolve: (name) => {
-        const local = localPages[`./pages/${name}.tsx`];
-        if (local) {
-            return local();
-        }
+/**
+ * Boot the admin shell.
+ *
+ * The initial page's `bootModules` are preloaded BEFORE `createInertiaApp`
+ * is invoked so plugin-registered actions/filters bind before Inertia's
+ * `resolve` fires and before the shell renders. `keystone.admin.boot` is
+ * dispatched with the mounted Inertia app so consumers can grab a
+ * one-shot reference to it if they need to imperatively navigate or
+ * inspect page props.
+ *
+ * Preload is bounded by {@link BOOT_MODULE_PRELOAD_TIMEOUT_MS} so a slow
+ * or hung plugin `remoteEntry.js` fetch can't block the admin shell from
+ * mounting. Plugins whose boot module hasn't resolved by the deadline
+ * miss the very first render — their hook callbacks bind whenever the
+ * fetch eventually completes (or fails, silently, per the preloader's
+ * per-entry catch), and the next React commit picks them up.
+ */
+const BOOT_MODULE_PRELOAD_TIMEOUT_MS = 3_000;
 
-        const entry = federatedIndex[name];
-        if (entry) {
-            return resolveFederatedPage(name, entry);
-        }
+async function bootAdminShell(): Promise<void> {
+    const bootEntries = initialManifest?.bootModules ?? [];
+    if (bootEntries.length > 0) {
+        await Promise.race([
+            preloadFederatedBootModules(bootEntries),
+            new Promise<void>((resolve) => window.setTimeout(resolve, BOOT_MODULE_PRELOAD_TIMEOUT_MS)),
+        ]);
+    }
 
-        throw new Error(`Inertia page not found: ./pages/${name}.tsx`);
-    },
-    setup({ el, App, props }) {
-        const sharedName = (props.initialPage.props as { name?: string }).name;
-        if (sharedName) {
-            appName = sharedName;
-        }
-        const sharedManifest = (
-            props.initialPage.props as {
-                keystone?: { federatedModules?: FederatedModuleManifest };
+    // Filter the initial federated index NOW — after boot modules
+    // have had a chance to bind their `keystone.admin.plugins.federatedIndex`
+    // subscribers, and BEFORE `createInertiaApp` resolves the initial
+    // page component. Doing this at module top would fire the filter
+    // with no subscribers registered yet, so the first federated page
+    // render would miss every plugin's rewrite.
+    federatedIndex = applyFederatedIndexFilter(initialManifest?.pages ?? {}, 'initial');
+
+    const app = await createInertiaApp({
+        title: (title) => (title ? `${title} - ${appName}` : appName),
+        resolve: (name) => {
+            const local = localPages[`./pages/${name}.tsx`];
+            if (local) {
+                return local();
             }
-        ).keystone?.federatedModules;
-        if (sharedManifest) {
-            federatedIndex = sharedManifest;
-        }
-        const tree = (
-            <ThemeProvider defaultColorScheme="system">
-                <App {...props} />
-            </ThemeProvider>
-        );
-        if (el.hasChildNodes()) {
-            hydrateRoot(el, tree);
-            return;
-        }
-        createRoot(el).render(tree);
-    },
-    // Inertia's built-in NProgress driver is disabled here — `@/lib/admin/progress`
-    // owns the shared `#nprogress` element for BOTH Inertia navigations and the
-    // admin manual-fetch API. A single ref-counted coordinator prevents either
-    // source from prematurely completing the bar while the other still needs it.
-    // Styling and colouring live in `resources/css/app.css`.
-    progress: false,
-});
+
+            const entry = federatedIndex[name];
+            if (entry) {
+                return resolveFederatedPage(name, entry);
+            }
+
+            throw new Error(`Inertia page not found: ./pages/${name}.tsx`);
+        },
+        setup({ el, App, props }) {
+            const sharedName = (props.initialPage.props as { name?: string }).name;
+            if (sharedName) {
+                appName = sharedName;
+            }
+            const sharedManifest = (
+                props.initialPage.props as {
+                    keystone?: { federatedModules?: FederatedModuleManifest };
+                }
+            ).keystone?.federatedModules;
+            if (sharedManifest) {
+                // Setup runs ONCE for the initial page render, so this
+                // second application of the filter is still part of the
+                // first mount. Marking it `'initial'` (matching the
+                // pre-createInertiaApp fire above) keeps subscribers
+                // that branch on `source` from mis-classifying the
+                // mount as an SPA navigation.
+                federatedIndex = applyFederatedIndexFilter(sharedManifest.pages, 'initial');
+            }
+            // `keystone.admin.providers` runs OUTSIDE the ThemeProvider so a
+            // plugin can wrap the whole shell — including the theme
+            // context — with its own provider (i18n, analytics context,
+            // feature-flag provider, etc.). Default value is the raw
+            // <App /> tree; callbacks receive the current node and return
+            // the (possibly wrapped) replacement.
+            const providerTree = applyFilters<ReactNode>(
+                'keystone.admin.providers',
+                <App {...props} />,
+            );
+            const tree = (
+                <ThemeProvider defaultColorScheme="system">
+                    {providerTree}
+                </ThemeProvider>
+            );
+            if (el.hasChildNodes()) {
+                hydrateRoot(el, tree);
+                return;
+            }
+            createRoot(el).render(tree);
+        },
+        // Inertia's built-in NProgress driver is disabled here — `@/lib/admin/progress`
+        // owns the shared `#nprogress` element for BOTH Inertia navigations and the
+        // admin manual-fetch API. A single ref-counted coordinator prevents either
+        // source from prematurely completing the bar while the other still needs it.
+        // Styling and colouring live in `resources/css/app.css`.
+        progress: false,
+    });
+
+    doAction('keystone.admin.boot', app);
+}
+
+void bootAdminShell();

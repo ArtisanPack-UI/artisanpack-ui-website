@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { doAction } from '@artisanpack-ui/hooks-js';
 
 /**
  * Isolates a single plugin-supplied edit-screen panel from the rest of
@@ -37,6 +38,24 @@ export class PanelErrorBoundary extends Component<Props, State> {
             error,
             info,
         );
+        doAction('keystone.admin.error.boundary', {
+            scope:      'panel',
+            error,
+            info,
+            slug:       this.props.slug,
+            pluginName: this.props.pluginName,
+        });
+        // Panel-scoped variant fires alongside the generic error.boundary
+        // action so a plugin can subscribe specifically to panel render
+        // failures (surface a per-panel diagnostic, mark the slug unhealthy
+        // for the current session, etc.) without filtering on
+        // `scope === 'panel'` at every call site.
+        doAction('keystone.admin.panels.error', {
+            error,
+            info,
+            slug:       this.props.slug,
+            pluginName: this.props.pluginName,
+        });
     }
 
     render(): ReactNode {

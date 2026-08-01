@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Support\Content\PublicVisibility;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
-use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 
 /**
@@ -113,12 +113,9 @@ class PermalinkStructure
             return null;
         }
 
-        $post = Post::query()
-            ->where('slug', $matches['post_name'])
-            ->where('status', ContentStatus::Published)
-            ->whereNotNull('published_at')
-            ->where('published_at', '<=', now())
-            ->first();
+        $post = PublicVisibility::posts(
+            Post::query()->where('slug', $matches['post_name']),
+        )->first();
 
         if (null === $post) {
             return null;

@@ -25,6 +25,8 @@ class VerifyEmailController extends Controller
             /** @var MustVerifyEmail $user */
             $user = $request->user();
 
+            doAction('keystone.auth.emailVerified', $user);
+
             event(new Verified($user));
         }
 

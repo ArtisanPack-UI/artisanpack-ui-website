@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { doAction } from '@artisanpack-ui/hooks-js';
 import type { Widget, WidgetOptions } from '@/types/keystone';
 
 export interface WidgetComponentProps<TData = unknown> {
@@ -20,7 +21,19 @@ const registry = new Map<string, WidgetComponent>();
  * exactly once during app boot (see `widgets/index.ts`).
  */
 export function registerWidget<TData = unknown>(key: string, component: WidgetComponent<TData>): void {
+    // Fire `keystone.admin.dashboard.widget.register` BEFORE the write so
+    // observers see the intended registration (and can log / warn on
+    // conflicts) even when the pre-existing entry is about to be
+    // silently overwritten. Args: `(key, ComponentType)`. Paired with
+    // the post-write `.dashboard.widget.registered` action.
+    doAction('keystone.admin.dashboard.widget.register', key, component);
+
     registry.set(key, component as WidgetComponent);
+
+    // Fire `keystone.admin.dashboard.widget.registered` so plugins can
+    // enumerate what's available at any point after boot without needing
+    // to observe every registration site directly. Args: `(key)`.
+    doAction('keystone.admin.dashboard.widget.registered', key);
 }
 
 /**

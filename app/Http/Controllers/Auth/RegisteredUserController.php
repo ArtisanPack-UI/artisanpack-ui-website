@@ -39,6 +39,8 @@ class RegisteredUserController extends Controller
             'password'     => Hash::make((string) $validated['password']),
         ]);
 
+        doAction('keystone.auth.registered', $user);
+
         event(new Registered($user));
 
         Auth::login($user);

@@ -1,5 +1,6 @@
 import { Suspense, useMemo, type ComponentType, type ReactNode } from 'react';
 import { usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
 import { AdminEditTabs } from './AdminEditTabs';
 import { resolveBuiltinPanel, type PanelComponentProps } from './registry';
@@ -47,8 +48,12 @@ export default function AdminEditSlot({
     const contentEdit = page.props.contentEdit;
 
     const entries = useMemo(
-        () => (contentEdit ? entriesForSlot(contentEdit, slot) : []),
-        [contentEdit, slot],
+        () => applyFilters<ContentEditEntry[]>(
+            'keystone.admin.panels.entries',
+            contentEdit ? entriesForSlot(contentEdit, slot) : [],
+            { slot, contentType, record },
+        ),
+        [contentEdit, slot, contentType, record],
     );
 
     if (entries.length === 0) {
@@ -108,7 +113,17 @@ function PanelBody({
     entry: ContentEditEntry;
     context: PanelContext;
 }): ReactNode {
-    const builtin = resolveBuiltinPanel(entry);
+    // `keystone.admin.panels.resolved` — plugins can override the built-in
+    // registry lookup with a custom component (swap the built-in SEO
+    // panel with their own, provide a fallback for a panel Keystone
+    // hasn't shipped yet). Args: `(ComponentType | null, entry)`;
+    // return the component to render, or `null` to fall back to
+    // federated/legacy resolution.
+    const builtin = applyFilters<ComponentType<PanelComponentProps> | null>(
+        'keystone.admin.panels.resolved',
+        resolveBuiltinPanel(entry) ?? null,
+        entry,
+    );
     if (builtin) {
         return renderPanel(builtin, entry, context);
     }
@@ -205,5 +220,12 @@ function entriesForSlot(
             return payload.panels.filter(
                 (p) => p.position === 'bottom' || p.position === 'default',
             );
+        // `before-form` / `after-form` don't have server-shipped
+        // buckets — plugins subscribe to `keystone.admin.panels.entries`
+        // and inject entries there. Return `[]` so the filter chain
+        // has something to seed.
+        case 'before-form':
+        case 'after-form':
+            return [];
     }
 }

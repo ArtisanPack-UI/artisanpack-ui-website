@@ -237,7 +237,7 @@ return [
 	| Keystone ships Breeze-style `login` (GET) and `logout` (POST)
 	| routes; the block emits a plain `<a>` so the logout link relies on
 	| the host bridging GET → POST. Until that's wired (see the
-	| `ap.visual-editor.loginout.envelope` filter), point `logout_path`
+	| `ap.visualEditor.loginout.envelope` filter), point `logout_path`
 	| at a GET-friendly logout endpoint or set the URL through the filter.
 	|
 	*/
@@ -281,7 +281,7 @@ return [
 	|
 	| Static-config entry points for the five site-editor entity types. Each
 	| key is also a filter slug — packages like cms-framework register their
-	| entities at runtime through `addFilter('ap.visual-editor.{type}', ...)`.
+	| entities at runtime through `addFilter('ap.visualEditor.{type}', ...)`.
 	|
 	| Static config wins on key collision: host-app entries listed here take
 	| precedence over filter-supplied entries with the same key.

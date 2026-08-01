@@ -178,6 +178,11 @@ build_release:
     # a glob syntax that's different from tar's anchored paths — we
     # match top-level and nested occurrences for the common cache /
     # build dirs.
+    #
+    # This list is the only thing that keeps a path out of the release
+    # artifact. `.gitattributes` `export-ignore` covers `git archive`
+    # (source downloads, Composer dist) but not this zip, so a
+    # developer-only file needs an entry in both places.
     - sudo apt-get update -qq && sudo apt-get install -y zip
     - |
       zip -r -q "keystone-${VERSION}.zip" . \
@@ -197,6 +202,7 @@ build_release:
            '.composer-cache/*' '*/.composer-cache/*' \
            '.npm/*' '*/.npm/*' \
            '.idea/*' '.vscode/*' \
+           'solo.yml' \
            '*/.DS_Store' '.DS_Store' \
            "keystone-${VERSION}.zip" "keystone-${VERSION}.zip.sha256"
     - sha256sum "keystone-${VERSION}.zip" | awk '{print $1}' > "keystone-${VERSION}.zip.sha256"

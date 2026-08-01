@@ -11,7 +11,7 @@ use stdClass;
 
 /**
  * Bridges the cms-framework `ContentEditExtensions` manager (the
- * `ap.admin.contentEdit.*` filter registry) into the shape the admin
+ * `ap.cmsFramework.admin.contentEdit.*` filter registry) into the shape the admin
  * edit screens expose to React. Plugins register panels/tabs/blocks
  * through the framework filter; Keystone reads them here and passes
  * them as an Inertia prop so the `<AdminEditSlot>` component can pick
@@ -54,7 +54,7 @@ class PanelSlotSupport
     }
 
     /**
-     * Run a save payload through the `ap.admin.contentEdit.saveData`
+     * Run a save payload through the `ap.cmsFramework.admin.contentEdit.saveData`
      * filter so plugin panels can wash, annotate, or reject fields
      * before the host persists them. Called on the VALIDATED payload
      * (after `$request->validate()`) so a misbehaving plugin filter

@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { PageHeader } from '@/components/admin/keystone';
 import CollapsibleCard from '@/components/admin/CollapsibleCard';
@@ -66,7 +67,7 @@ export default function DynamicContentEdit() {
     // columns; rendering them would let editors submit values that are
     // never persisted.
     const hasColumn = contentType.has_column;
-    const showContent = supports.includes('content') && hasColumn.content;
+    const showContent = supports.includes('editor') && hasColumn.content;
     const showExcerpt = supports.includes('excerpt') && hasColumn.excerpt;
     const showFeaturedImage = supports.includes('featured_image') && hasColumn.featured_image_id;
     const showAuthor = supports.includes('author') && hasColumn.author_id;
@@ -104,7 +105,12 @@ export default function DynamicContentEdit() {
         status: (record.status as string | null) ?? 'draft',
         published_at: (record.published_at as string | null) ?? '',
         author_id: (record.author_id as number | null) ?? null,
-        featured_image_id: (record.featured_image_id as number | null) ?? null,
+        // Seeded from the hydrated `featuredImage` prop, not the raw
+        // column: the server emits null when the referenced media row
+        // is gone, so a dangling id self-heals on the next save instead
+        // of being resubmitted and rejected by the `exists:media,id`
+        // rule. Matches how posts/Edit and pages/Edit derive it.
+        featured_image_id: featuredImage?.id ?? null,
         values: initial,
         term_ids: assignedTermIds ?? [],
     });
@@ -144,7 +150,15 @@ export default function DynamicContentEdit() {
             ...prev,
             [taxonomySlug]: [...(prev[taxonomySlug] ?? []), term],
         }));
-        form.setData('term_ids', [...form.data.term_ids, term.id]);
+        // Functional updater, not a spread of `form.data.term_ids`: that
+        // array was captured when the click handler was created, so any
+        // chip the user toggled while this POST was in flight would be
+        // silently reverted by the write. `Set` also guards against the
+        // new term id already being present.
+        form.setData((data) => ({
+            ...data,
+            term_ids: Array.from(new Set([...data.term_ids, term.id])),
+        }));
         setNewTermInput((prev) => ({ ...prev, [taxonomySlug]: '' }));
     }
 
@@ -353,14 +367,43 @@ export default function DynamicContentEdit() {
                         </div>
                     </CollapsibleCard>
 
-                    {showContent ? (
-                        <VisualEditor
-                            resource={contentType.slug}
-                            id={record.id as number}
-                            initialTitle={form.data.title}
-                            supports={{ title: false, document: false, excerpt: showExcerpt, featuredImage: false }}
-                        />
-                    ) : null}
+                    {applyFilters<ReactNode>(
+                        // Slot rendered between the built-in Attributes card
+                        // and the VisualEditor mount so a plugin can inject
+                        // extra editor sections (e.g. workflow status, an
+                        // audit trail, per-record notes). Starting value is
+                        // `null`. Args: `(ReactNode, { form, contentType,
+                        // record })`.
+                        'keystone.admin.dynamicContent.editorSections',
+                        null,
+                        { form, contentType, record },
+                    )}
+
+                    {showContent
+                        ? applyFilters<ReactNode>(
+                            // Route the built-in VisualEditor mount through
+                            // `.dynamicContent.registerRenderer` so a plugin
+                            // can substitute an entirely different editor
+                            // for specific content types (e.g. a plugin
+                            // that ships a headless Markdown editor for a
+                            // `docs` content type, or a Craft-style block
+                            // editor). The starting value is the standard
+                            // VisualEditor node — plugins that don't
+                            // recognize `contentType.slug` should pass it
+                            // through unchanged. Args: `(ReactNode,
+                            // { contentType, record, form })`.
+                            'keystone.admin.dynamicContent.registerRenderer',
+                            (
+                                <VisualEditor
+                                    resource={contentType.slug}
+                                    id={record.id as number}
+                                    initialTitle={form.data.title}
+                                    supports={{ title: false, document: false, excerpt: showExcerpt, featuredImage: false }}
+                                />
+                            ),
+                            { contentType, record, form },
+                        )
+                        : null}
                 </form>
             </div>
         </>

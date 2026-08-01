@@ -45,8 +45,14 @@
     @if ($activeTheme)
         <link rel="stylesheet" href="{{ route('themes.asset', ['theme' => $activeTheme, 'path' => 'style.css']) }}">
     @endif
+
+    {{-- Plugin injection zone: WP-style `wp_head` analog. --}}
+    @action('keystone.public.head')
 </head>
 <body>
+    {{-- Plugin injection zone: WP-style `wp_body_open` analog. --}}
+    @action('keystone.public.bodyOpen')
+
     <x-ve-blocks :tree="$headerBlocks" :default-theme="$activeTheme" />
 
     {{--
@@ -76,5 +82,15 @@
     </main>
 
     <x-ve-blocks :tree="$footerBlocks" :default-theme="$activeTheme" />
+
+    {{-- Plugin injection zone: WP-style `wp_enqueue_scripts` analog.
+         Fires before the `@stack('scripts')` flush so plugins can
+         `@push('scripts', …)` from anywhere in the request. --}}
+    @action('keystone.public.enqueueScripts')
+    @stack('scripts')
+
+    {{-- Plugin injection zone: WP-style `wp_footer` analog. Last hook
+         before </body>. --}}
+    @action('keystone.public.footer')
 </body>
 </html>

@@ -1,8 +1,10 @@
-import { useState, type FormEvent, type ReactElement } from 'react';
+import { useState, type FormEvent, type ReactElement, type ReactNode } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import admin from '@/routes/admin';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Card, PageHeader, StatusBadge } from '@/components/admin/keystone';
+import { keystoneConfirm } from '@/lib/admin/confirm';
 
 type CheckStatus = 'ok' | 'no_url' | 'no_releases' | 'unauthorized' | 'not_found' | 'error';
 
@@ -104,7 +106,7 @@ export default function Updates({ updates }: UpdatesProps) {
             return;
         }
 
-        const confirmed = window.confirm(
+        const confirmed = keystoneConfirm(
             `This will put the site in maintenance mode and install Keystone ${updates.latest_version ?? 'latest'}. Continue?`,
         );
 
@@ -220,17 +222,31 @@ export default function Updates({ updates }: UpdatesProps) {
                             ) : null}
 
                             <form onSubmit={handleUpdate} className="flex items-center justify-end gap-3 border-t border-base-300/60 pt-4">
-                                <button
-                                    type="submit"
-                                    disabled={!updates.has_update || submitting}
-                                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-content hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {submitting
-                                        ? 'Installing…'
-                                        : updates.has_update
-                                          ? `Update now to ${updates.latest_version}`
-                                          : 'No update available'}
-                                </button>
+                                {applyFilters<ReactNode>(
+                                    // Route the built-in "Update now" action row
+                                    // through `.settings.updates.actions` so a
+                                    // plugin can prepend controls (e.g. a
+                                    // "Snapshot only" button, a "Download the
+                                    // installer" link) or replace the row
+                                    // entirely (e.g. a plugin that gates
+                                    // updates behind an approval workflow).
+                                    // Args: `(ReactNode, { updates, submitting })`.
+                                    'keystone.admin.settings.updates.actions',
+                                    (
+                                        <button
+                                            type="submit"
+                                            disabled={!updates.has_update || submitting}
+                                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-content hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            {submitting
+                                                ? 'Installing…'
+                                                : updates.has_update
+                                                  ? `Update now to ${updates.latest_version}`
+                                                  : 'No update available'}
+                                        </button>
+                                    ),
+                                    { updates, submitting },
+                                )}
                             </form>
                         </div>
                     </Card>

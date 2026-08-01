@@ -77,6 +77,8 @@ class CustomFieldController extends Controller
             return back()->withInput()->withErrors(['key' => __('Failed to create custom field.')]);
         }
 
+        doAction('keystone.admin.contentTypes.customField.registered', $field);
+
         return redirect()
             ->route('admin.content-model.custom-fields.index')
             ->with('success', __('Custom field ":name" created.', ['name' => $field->name]));
@@ -118,6 +120,8 @@ class CustomFieldController extends Controller
                 ->withErrors(['key' => __('Failed to update custom field.')]);
         }
 
+        doAction('keystone.admin.contentTypes.customField.updated', $updated);
+
         return redirect()
             ->route('admin.content-model.custom-fields.index')
             ->with('success', __('Custom field ":name" updated.', ['name' => $updated->name]));
@@ -146,6 +150,12 @@ class CustomFieldController extends Controller
 
             return back()->withErrors(['key' => __('Failed to delete custom field.')]);
         }
+
+        // Fire after the manager call succeeds so a failed delete doesn't
+        // hand subscribers a phantom "deleted" event. `$customField` is
+        // the pre-delete model instance so subscribers still get the
+        // full payload.
+        doAction('keystone.admin.contentTypes.customField.deleted', $customField);
 
         return redirect()
             ->route('admin.content-model.custom-fields.index')

@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactNode } from 'react';
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Card, PageHeader } from '@/components/admin/keystone';
 import { update as customFieldUpdate } from '@/routes/admin/content-model/custom-fields';
@@ -103,6 +104,20 @@ export default function CustomFieldEdit() {
                         <TextField label="Order" value={form.data.order} onChange={(v) => form.setData('order', v)} error={form.errors.order} type="number" />
                         <TextField label="Description" value={form.data.description} onChange={(v) => form.setData('description', v)} error={form.errors.description} className="md:col-span-2" />
                         <BoolField label="Required" value={form.data.required} onChange={(v) => form.setData('required', v)} />
+                        {applyFilters<ReactNode>(
+                            // Slot rendered inside the custom-field
+                            // definition form so a plugin can inject
+                            // extra controls (e.g. per-type editor
+                            // settings, a "used by" advisory) alongside
+                            // the built-in fields. Starting value is
+                            // `null`. Wrap the return in
+                            // `<div className="md:col-span-2">` for a
+                            // full-width block. Args: `(ReactNode,
+                            // { form, customField, mode: 'edit' })`.
+                            'keystone.admin.customFields.definition.form',
+                            null,
+                            { form, customField, mode: 'edit' },
+                        )}
                         <div className="md:col-span-2 flex items-center gap-2">
                             <button type="submit" disabled={form.processing} className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:opacity-50">
                                 {form.processing ? 'Saving…' : 'Save changes'}

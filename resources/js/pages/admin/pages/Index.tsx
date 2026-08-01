@@ -9,9 +9,14 @@ import {
     StatusBadge,
     type Tone,
 } from '@/components/admin/keystone';
+import {
+    AddContentModal,
+    type AddContentModalOption,
+} from '@/components/admin/AddContentModal';
+import { useAddContentModal } from '@/lib/admin/useAddContentModal';
 import { formatRelativeTime } from '@/lib/admin/shared';
 import type { PageRow } from '@/types/keystone';
-import { create, destroy, duplicate, edit } from '@/routes/admin/pages';
+import { destroy, duplicate, edit } from '@/routes/admin/pages';
 
 const statusTone: Record<PageRow['status'], Tone> = {
     published: 'success',
@@ -21,17 +26,36 @@ const statusTone: Record<PageRow['status'], Tone> = {
 
 type Tab = 'all' | 'published' | 'draft' | 'scheduled';
 
+interface NewContentPayload {
+    label: string;
+    hierarchical: boolean;
+    parentOptions: AddContentModalOption[];
+    templates: AddContentModalOption[];
+    quickCreateUrl: string;
+}
+
 interface PageProps {
     pages: PageRow[];
     limit: { max: number | null; current: number };
+    newContent: NewContentPayload;
     flash?: { success?: string; error?: string };
     [key: string]: unknown;
 }
 
 export default function Index() {
-    const { pages, limit, flash } = usePage<PageProps>().props;
+    const { pages, limit, newContent, flash } = usePage<PageProps>().props;
     const [query, setQuery] = useState('');
     const [tab, setTab] = useState<Tab>('all');
+    // #184 — landing from a "New page" menu link auto-opens the modal
+    // (via `?new=1`); the hook also strips the parameter on close so a
+    // reload or a Back doesn't reopen a dismissed dialog.
+    //
+    // Gated on the plan limit: the "New page" trigger is replaced by a
+    // limit notice at the cap, so honouring `?new=1` there would open a
+    // create form the user cannot submit — and leave the modal with no
+    // trigger to hand focus back to on close (#193 review).
+    const atLimit = limit.max !== null && limit.current >= limit.max;
+    const { open: modalOpen, openModal, closeModal } = useAddContentModal(!atLimit);
 
     const filtered = pages.filter((p) => {
         if (tab !== 'all' && p.status !== tab) return false;
@@ -60,8 +84,6 @@ export default function Index() {
         ['scheduled', 'Scheduled'],
     ];
 
-    const atLimit = limit.max !== null && limit.current >= limit.max;
-
     function handleDuplicate(page: PageRow) {
         router.post(duplicate(page.id).url, {}, { preserveScroll: true });
     }
@@ -87,24 +109,47 @@ export default function Index() {
                                 Limit reached ({limit.current}/{limit.max})
                             </span>
                         ) : (
-                            <Link
-                                href={create().url}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90"
+                            <button
+                                id="new-content-trigger"
+                                type="button"
+                                onClick={openModal}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:outline-none"
                             >
                                 {Icon.plus}
                                 New page
-                            </Link>
+                            </button>
                         )
                     }
                 />
 
+                <AddContentModal
+                    open={modalOpen}
+                    onClose={closeModal}
+                    label={newContent.label}
+                    hierarchical={newContent.hierarchical}
+                    parentOptions={newContent.parentOptions}
+                    templates={newContent.templates}
+                    quickCreateUrl={newContent.quickCreateUrl}
+                />
+
                 {flash?.success && (
-                    <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
+                    <div
+                        /*
+                         * `role="status"` — the save confirmation is the
+                         * single most important state change on this screen
+                         * and it was landing silently. The node is inserted
+                         * fresh by the Inertia visit, which is what a polite
+                         * live region announces.
+                         */
+                        role="status"
+                        className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
                         {flash.success}
                     </div>
                 )}
                 {flash?.error && (
-                    <div className="rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error">
+                    <div
+                        role="alert"
+                        className="rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error">
                         {flash.error}
                     </div>
                 )}
@@ -131,7 +176,7 @@ export default function Index() {
                             ))}
                         </div>
                         <div className="relative flex-1 max-w-xs">
-                            <span className="pointer-events-none absolute top-2 left-2.5 text-base-content/45">
+                            <span className="pointer-events-none absolute top-2 left-2.5 text-base-content/60">
                                 {Icon.search}
                             </span>
                             <input
@@ -145,6 +190,7 @@ export default function Index() {
                     </div>
 
                     <DataTable<PageRow>
+                        resource="pages"
                         columns={[
                             {
                                 key: 'title',
@@ -157,7 +203,7 @@ export default function Index() {
                                         >
                                             {r.title}
                                         </Link>
-                                        <div className="font-mono text-[11px] text-base-content/55">
+                                        <div className="font-mono text-[11px] text-base-content/70">
                                             /{r.slug}
                                         </div>
                                     </div>
@@ -243,7 +289,7 @@ function RowAction({
             : 'hover:bg-base-200 hover:text-base-content';
 
     const className =
-        'group relative grid h-7 w-7 place-items-center rounded-md text-base-content/55 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
+        'group relative grid h-7 w-7 place-items-center rounded-md text-base-content/70 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
         toneClass;
 
     const inner = (

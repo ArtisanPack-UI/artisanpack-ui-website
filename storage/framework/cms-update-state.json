@@ -1,0 +1,13 @@
+{
+    "status": "completed",
+    "step": "disable_maintenance_mode",
+    "step_number": 10,
+    "step_label": "Disable maintenance mode",
+    "target_version": "0.3.1",
+    "current_version": "0.2.5",
+    "php_sapi": "fpm-fcgi",
+    "pid": 98625,
+    "started_at": "2026-08-01T17:30:08-05:00",
+    "error": null,
+    "updated_at": "2026-08-01T17:31:34-05:00"
+}

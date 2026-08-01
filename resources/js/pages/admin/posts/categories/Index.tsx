@@ -166,6 +166,7 @@ export default function CategoriesIndex() {
 
                     <Card padded={false}>
                         <DataTable<CategoryRow>
+                            resource="posts.categories"
                             columns={[
                                 {
                                     key: 'name',

@@ -80,6 +80,7 @@ export default function Orders({
 
                 <Card padded={false}>
                     <DataTable<OrderRow>
+                        resource="orders"
                         columns={[
                             {
                                 key: 'id',

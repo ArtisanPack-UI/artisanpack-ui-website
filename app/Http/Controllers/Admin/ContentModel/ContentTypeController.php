@@ -6,13 +6,14 @@ namespace App\Http\Controllers\Admin\ContentModel;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ContentModel\ContentTypeRequest;
+use App\Support\ContentModel\ContentTypeTables;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -52,7 +53,7 @@ class ContentTypeController extends Controller
         /** @var string $slug */
         $slug = $data['slug'];
 
-        $tableName = $this->deriveTableName($slug);
+        $tableName = ContentTypeTables::derive($slug);
         // Framework's CustomFieldManager mutates $type->table_name during
         // custom-field creation, so we need a real table. Rely on the
         // consumer-side migration + a placeholder create migration; for
@@ -72,7 +73,7 @@ class ContentTypeController extends Controller
         $type = null;
         try {
             $type = $this->manager->createContentType($payload);
-            $this->ensureRecordsTable($tableName, $payload['supports']);
+            $this->ensureRecordsTable($tableName, $payload['supports'], $slug);
         } catch (Throwable $e) {
             report($e);
 
@@ -91,6 +92,8 @@ class ContentTypeController extends Controller
                 ->withInput()
                 ->withErrors(['slug' => __('Failed to create content type.')]);
         }
+
+        doAction('keystone.admin.contentTypes.contentType.created', $type);
 
         return redirect()
             ->route('admin.content-model.content-types.index')
@@ -131,7 +134,7 @@ class ContentTypeController extends Controller
             // record editor's Featured Image / Excerpt / etc. sections
             // have somewhere to write. Existing columns are never
             // dropped.
-            $this->ensureRecordsTable($updated->table_name, $data['supports']);
+            $this->ensureRecordsTable($updated->table_name, $data['supports'], $updated->slug);
         } catch (Throwable $e) {
             report($e);
 
@@ -139,6 +142,8 @@ class ContentTypeController extends Controller
                 ->withInput()
                 ->withErrors(['slug' => __('Failed to update content type.')]);
         }
+
+        doAction('keystone.admin.contentTypes.contentType.updated', $updated);
 
         return redirect()
             ->route('admin.content-model.content-types.index')
@@ -160,6 +165,12 @@ class ContentTypeController extends Controller
 
             return back()->withErrors(['slug' => __('Failed to delete content type.')]);
         }
+
+        // Fire after the manager call succeeds — a pre-delete emit would
+        // hand subscribers a phantom "deleted" event on a row that still
+        // exists if the manager throws. `$type` is the pre-delete
+        // snapshot so subscribers still get the full payload.
+        doAction('keystone.admin.contentTypes.contentType.deleted', $type);
 
         return redirect()
             ->route('admin.content-model.content-types.index')
@@ -214,34 +225,43 @@ class ContentTypeController extends Controller
     }
 
     /**
-     * Derive a snake_cased plural table name from a kebab-case slug so
-     * admins don't have to reason about DB tables when creating a
-     * content type. `portfolio` → `portfolios`, `case-study` →
-     * `case_studies`.
-     */
-    private function deriveTableName(string $slug): string
-    {
-        return Str::snake(Str::pluralStudly(Str::studly($slug)));
-    }
-
-    /**
      * Ensure the base records table exists so admins can immediately
      * create records against a freshly-defined content type without
      * dropping to the command line. Adds columns for the plain-scalar
-     * `supports` features (`title`, `content`, `excerpt`) so the
+     * `supports` features (`title`, `editor`, `excerpt`) so the
      * matching form fields on DynamicContentEdit have somewhere to
-     * write. Richer supports (`featured_image`, `author`, `comments`,
-     * `revisions`, `page_attributes`) need pivots or dedicated tables
-     * and are left as follow-up work.
+     * write — `editor` maps to the record table's `content` column,
+     * matching the framework's SupportsFeature vocabulary. Richer
+     * supports (`featured_image`, `author`, `revisions`,
+     * `page_attributes`) need pivots or dedicated tables and are left
+     * as follow-up work.
      *
      * `hasTable` short-circuits so re-running against an already-migrated
      * table is idempotent (matters if a user restores a content-type row
      * on top of an existing table).
      *
+     * Ownership is claimed BEFORE any DDL runs, and a failed claim aborts
+     * the whole operation. Validation's {@see ContentTypeTables::claimableBy()}
+     * is a read, so two concurrent creates for slugs deriving the same
+     * table both pass it; the claim is what actually arbitrates, and
+     * provisioning after it means the loser never touches a table it does
+     * not own. `store()`'s existing compensation unwinds the content-type
+     * row when this throws.
+     *
      * @param  list<string>  $supports
+     *
+     * @throws RuntimeException when another content type owns the table.
      */
-    private function ensureRecordsTable(string $tableName, array $supports): void
+    private function ensureRecordsTable(string $tableName, array $supports, string $slug): void
     {
+        if (! ContentTypeTables::claim($slug, $tableName)) {
+            throw new RuntimeException(sprintf(
+                'Table "%s" is already owned by content type "%s".',
+                $tableName,
+                (string) ContentTypeTables::ownerSlug($tableName),
+            ));
+        }
+
         if (! Schema::hasTable($tableName)) {
             Schema::create($tableName, function (Blueprint $table): void {
                 $table->id();
@@ -268,7 +288,7 @@ class ContentTypeController extends Controller
             if (! Schema::hasColumn($tableName, 'published_at')) {
                 $table->timestamp('published_at')->nullable();
             }
-            if (in_array('content', $supports, true) && ! Schema::hasColumn($tableName, 'content')) {
+            if (in_array('editor', $supports, true) && ! Schema::hasColumn($tableName, 'content')) {
                 $table->longText('content')->nullable();
             }
             if (in_array('excerpt', $supports, true) && ! Schema::hasColumn($tableName, 'excerpt')) {

@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Support\Seo;
 
+use App\Support\Hooks;
+use App\Support\Media\ImageMediaRule;
 use ArtisanPackUI\MediaLibrary\Models\Media;
 use ArtisanPackUI\SEO\Models\SeoMeta;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\Rules\Exists;
 use Throwable;
 
 /**
@@ -22,7 +25,7 @@ class SeoMetaSupport
      * fields are nullable so existing edit screens keep working when
      * nothing is filled in.
      *
-     * @return array<string, array<int, string>>
+     * @return array<string, array<int, Exists|string>>
      */
     public static function rules(): array
     {
@@ -36,11 +39,11 @@ class SeoMetaSupport
             'seo.focus_keyword'         => ['nullable', 'string', 'max:255'],
             'seo.og_title'              => ['nullable', 'string', 'max:255'],
             'seo.og_description'        => ['nullable', 'string', 'max:1000'],
-            'seo.og_image_id'           => ['nullable', 'integer', 'exists:media,id'],
+            'seo.og_image_id'           => ImageMediaRule::nullable(),
             'seo.twitter_card'          => ['nullable', 'string', 'in:summary,summary_large_image,app,player'],
             'seo.twitter_title'         => ['nullable', 'string', 'max:255'],
             'seo.twitter_description'   => ['nullable', 'string', 'max:1000'],
-            'seo.twitter_image_id'      => ['nullable', 'integer', 'exists:media,id'],
+            'seo.twitter_image_id'      => ImageMediaRule::nullable(),
             'seo.schema_type'           => ['nullable', 'string', 'max:100'],
             'seo.sitemap_priority'      => ['nullable', 'numeric', 'between:0,1'],
             'seo.sitemap_changefreq'    => ['nullable', 'string', 'in:always,hourly,daily,weekly,monthly,yearly,never'],
@@ -66,7 +69,7 @@ class SeoMetaSupport
             ->where('seoable_id', $model->getKey())
             ->first();
 
-        return [
+        $payload = [
             'meta_title'           => $seo?->meta_title ?? '',
             'meta_description'     => $seo?->meta_description ?? '',
             'canonical_url'        => $seo?->canonical_url ?? '',
@@ -85,6 +88,17 @@ class SeoMetaSupport
             'sitemap_changefreq'   => $seo?->sitemap_changefreq ?? 'weekly',
             'exclude_from_sitemap' => (bool) ($seo?->exclude_from_sitemap ?? false),
         ];
+
+        $filtered = applyFilters('keystone.seo.meta.payload', $payload, $model, $seo);
+
+        // Guarded: a subscriber returning a non-array (accident or plugin
+        // bug) would throw a TypeError at the sink and crash every edit
+        // screen. Fall back to the pre-filter payload — matches the
+        // "untrusted plugin output" posture in SitemapEntryReconciler.
+        /** @var array<string, mixed> $result */
+        $result = is_array($filtered) ? $filtered : $payload;
+
+        return $result;
     }
 
     /**
@@ -130,16 +144,20 @@ class SeoMetaSupport
                 ->where('seoable_id', $modelId)
                 ->delete();
 
+            Hooks::safeDoAction('keystone.admin.seo.meta.updated', $model, null);
+
             return;
         }
 
-        SeoMeta::query()->updateOrCreate(
+        $seo = SeoMeta::query()->updateOrCreate(
             [
                 'seoable_type' => $modelType,
                 'seoable_id'   => $modelId,
             ],
             $data,
         );
+
+        Hooks::safeDoAction('keystone.admin.seo.meta.updated', $model, $seo);
     }
 
     /**

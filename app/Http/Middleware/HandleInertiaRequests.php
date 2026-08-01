@@ -78,6 +78,7 @@ class HandleInertiaRequests extends Middleware
                     : KeystoneSampleData::me(),
                 'site'            => $this->site(),
                 'brand'           => $this->brand(),
+                'version'         => (string) config('app.version', '0.0.0'),
                 'adminTheme'      => AdminTheme::palette(),
                 'notifications'   => NotificationItemPayload::forUser($user, limit: 10),
                 'features'        => $features,
@@ -226,15 +227,18 @@ class HandleInertiaRequests extends Middleware
      * {@see FederatedModuleManifest} flattens that shape into the
      * per-page-name lookup the client resolver expects.
      *
-     * @return array<string, array{remote: string, entry: string, module: string}>
+     * @return array{
+     *     pages: array<string, array{remote: string, entry: string, module: string}>,
+     *     bootModules: list<array{remote: string, entry: string, module: string}>,
+     * }
      */
     private function federatedModules(?User $user): array
     {
         if (null === $user || ! $user->hasRole('admin')) {
-            return [];
+            return ['pages' => [], 'bootModules' => []];
         }
 
-        /** @var array<string, array{entry?: mixed, exposes?: mixed}> $registry */
+        /** @var array<string, array{entry?: mixed, exposes?: mixed, bootModule?: mixed}> $registry */
         $registry = (array) applyFilters('ap.plugins.federatedModules', []);
 
         return app(FederatedModuleManifest::class)->build($registry);

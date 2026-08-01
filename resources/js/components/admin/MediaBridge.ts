@@ -1,5 +1,6 @@
 import { Component, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import { MediaModal } from '@/vendor/media-library';
 import type { Media } from '@/vendor/media-library/types/media';
 
@@ -12,7 +13,26 @@ export interface MediaBridgeProps {
     allowedTypes?: Array<'image' | 'video' | 'audio' | 'document'>;
     context?: string;
     title?: string;
+    /**
+     * Optional resource slug used to dispatch the
+     * `keystone.admin.{resource}.media.picker.filters` alias in
+     * addition to the generic one. Not surfaced to the vendor MediaModal.
+     */
+    resource?: string;
 }
+
+/**
+ * Payload the `.media.picker.filters` hook accepts. Kept intentionally
+ * narrow: subscribers can widen/narrow allowed types and (later) add
+ * advanced-filter chips, but cannot strip essential bridge props like
+ * `open` — the modal would silently refuse to open.
+ */
+type PickerFilterPayload = {
+    allowedTypes?: MediaBridgeProps['allowedTypes'];
+    multiSelect?: MediaBridgeProps['multiSelect'];
+    maxSelections?: MediaBridgeProps['maxSelections'];
+    title?: MediaBridgeProps['title'];
+};
 
 /**
  * Cross-React-version bridge for the artisanpack-ui/media-library `MediaModal`.
@@ -105,10 +125,51 @@ export class MediaBridge extends Component<MediaBridgeProps> {
      * can drop the session even when its React parent has gone away.
      */
     modalElement() {
+        // `keystone.admin.media.picker.filters` — filters a narrow
+        // `PickerFilterPayload` (allowedTypes / multiSelect / title /
+        // maxSelections) rather than the full `MediaBridgeProps`, so
+        // a subscriber can never strip essential props like `open` /
+        // `onClose` and silently break the modal. Args: `(payload,
+        // { context, component, resource })`. Runs generic-first, then
+        // resource-scoped when the caller wired a `resource` prop.
+        // Uploads originating INSIDE the modal are covered by the
+        // wrapper in `resources/js/lib/admin/mediaApi.ts`.
+        // Separate `resource` from the rest of the props so it drives
+        // the hook context (below) but never reaches MediaModal — the
+        // vendor component doesn't declare it and the JSDoc on the
+        // interface documents it as "not surfaced to the modal".
+        const { resource, context, ...modalProps } = this.props;
+        const pickerCtx = { context, component: 'mediaBridge', resource };
+        const initialPayload: PickerFilterPayload = {
+            allowedTypes:  this.props.allowedTypes,
+            multiSelect:   this.props.multiSelect,
+            maxSelections: this.props.maxSelections,
+            title:         this.props.title,
+        };
+        const genericPayload = applyFilters<PickerFilterPayload>(
+            'keystone.admin.media.picker.filters',
+            initialPayload,
+            pickerCtx,
+        );
+        const filteredPayload = resource
+            ? applyFilters<PickerFilterPayload>(
+                `keystone.admin.${resource}.media.picker.filters`,
+                genericPayload,
+                pickerCtx,
+            )
+            : genericPayload;
         return createElement(MediaModal, {
-            ...this.props,
-            onClose: this.handleClose,
-            onSelect: this.handleSelect,
+            ...modalProps,
+            // Merge filter output back on top of the caller's props so
+            // a subscriber's payload wins for the filtered keys but
+            // essential structural props (open, onClose, onSelect,
+            // context) remain intact regardless of what a filter returns.
+            allowedTypes:  filteredPayload.allowedTypes ?? this.props.allowedTypes,
+            multiSelect:   filteredPayload.multiSelect ?? this.props.multiSelect,
+            maxSelections: filteredPayload.maxSelections ?? this.props.maxSelections,
+            title:         filteredPayload.title ?? this.props.title,
+            onClose:       this.handleClose,
+            onSelect:      this.handleSelect,
         });
     }
 

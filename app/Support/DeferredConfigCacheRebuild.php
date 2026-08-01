@@ -84,6 +84,10 @@ final class DeferredConfigCacheRebuild
                 // re-trigger.
                 $acquired = Cache::lock(self::LOCK_KEY, self::LOCK_TTL)->get(static function (): void {
                     Artisan::call('config:cache');
+
+                    // Emit only when this worker actually rebuilt — a
+                    // skipped acquire means someone else fired (or will).
+                    doAction('keystone.admin.settings.configCacheRebuilt');
                 });
 
                 if (false === $acquired) {

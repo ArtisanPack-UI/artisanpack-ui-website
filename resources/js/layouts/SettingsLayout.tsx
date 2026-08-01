@@ -1,11 +1,17 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { Link, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from './KeystoneAdminLayout';
 import { Card } from '@/components/admin/keystone';
 import admin from '@/routes/admin';
 import { acquireAdminMarker, releaseAdminMarker } from '@/lib/admin/progress';
 
-const TABS = [
+interface SettingsAccountTab {
+    href: string;
+    label: string;
+}
+
+const TABS: SettingsAccountTab[] = [
     { href: admin.profile().url, label: 'Profile' },
     { href: admin.password().url, label: 'Password' },
     { href: admin.twoFactor().url, label: 'Two-factor' },
@@ -24,6 +30,30 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
         return () => releaseAdminMarker();
     }, []);
 
+    // Filter the account-settings tab list so a plugin can inject an
+    // extra section (API keys, connected apps) or hide a shipped one.
+    // Same `.settings.tabs` name as the site Settings page uses —
+    // context is derived from `currentPath` so a subscriber can
+    // distinguish the two surfaces if it needs to. Args:
+    // `(SettingsAccountTab[], { surface: 'account', currentPath })`.
+    const filteredTabs = useMemo(
+        () => applyFilters<SettingsAccountTab[]>(
+            'keystone.admin.settings.tabs',
+            TABS,
+            { surface: 'account', currentPath },
+        ),
+        [currentPath],
+    );
+
+    // Wrap the account-settings section body so a plugin can inject
+    // banners / chrome around the rendered content on any tab. Args:
+    // `(ReactNode, { surface: 'account', currentPath })`.
+    const sectionBody = applyFilters<ReactNode>(
+        'keystone.admin.settings.sections',
+        children,
+        { surface: 'account', currentPath },
+    );
+
     return (
         <KeystoneAdminLayout>
             <div className="flex flex-col gap-7">
@@ -32,7 +62,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
                         <Card padded={false}>
                             <nav aria-label="Settings sections">
                                 <ul className="flex flex-col p-1.5">
-                                    {TABS.map((tab) => {
+                                    {filteredTabs.map((tab: SettingsAccountTab) => {
                                         const active = currentPath === tab.href;
                                         return (
                                             <li key={tab.href}>
@@ -56,7 +86,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
                     </aside>
 
                     <section className="col-span-12 flex flex-col gap-5 lg:col-span-9">
-                        {children}
+                        {sectionBody}
                     </section>
                 </div>
             </div>

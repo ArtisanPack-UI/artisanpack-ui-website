@@ -6,6 +6,7 @@ import {
     type ReactNode,
 } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
+import { applyFilters, doAction } from '@artisanpack-ui/hooks-js';
 import { Avatar, useTheme } from '@artisanpack-ui/react';
 import admin from '@/routes/admin';
 import {
@@ -73,7 +74,7 @@ interface NavGroup {
 /**
  * Resolve the string `iconId` a menu row carries into the actual `Icon`
  * React element. Falls back to the settings glyph so a plugin subscribing
- * to `ap.admin.menu` with an unknown iconId still renders. Uses `hasOwn`
+ * to `ap.cmsFramework.admin.menu` with an unknown iconId still renders. Uses `hasOwn`
  * to avoid resolving `constructor` / `__proto__` / `toString` to
  * prototype methods that would crash React on render.
  */
@@ -127,6 +128,7 @@ interface SidebarProps {
     onMobileClose: () => void;
     navGroups: NavGroup[];
     brand: KeystoneSharedProps['keystone']['brand'];
+    version: string;
 }
 
 function Sidebar({
@@ -137,6 +139,7 @@ function Sidebar({
     onMobileClose,
     navGroups,
     brand,
+    version,
 }: SidebarProps) {
     // Manual expand/collapse overrides per parent item. Falls back to
     // `sectionActive` so navigating directly to a child route still
@@ -192,7 +195,35 @@ function Sidebar({
                             )}
                             {collapsed && <div className="my-2 h-px bg-[var(--chrome-divider)]" />}
                             <ul className="flex flex-col gap-0.5">
-                                {group.items.map((item) => {
+                                {group.items.map((rawItem) => {
+                                    // Per-item filter: plugins can rewrite label / href /
+                                    // children / matchPrefix for individual entries via
+                                    // `keystone.admin.navItem`. Returning nullish from a
+                                    // callback removes the item entirely — accepts
+                                    // `undefined` too (plain-JS plugins that omit the
+                                    // return) so we don't spread an empty object into a
+                                    // keyless `<li>` on accident.
+                                    const filteredItem = applyFilters<NavItem | null>(
+                                        'keystone.admin.navItem',
+                                        rawItem,
+                                        { groupLabel: group.label },
+                                    );
+                                    if (null == filteredItem) {
+                                        return null;
+                                    }
+                                    const item: NavItem = {
+                                        ...filteredItem,
+                                        badge: applyFilters<NavItem['badge']>(
+                                            'keystone.admin.navItem.badge',
+                                            filteredItem.badge,
+                                            filteredItem,
+                                        ),
+                                        icon: applyFilters<NavItem['icon']>(
+                                            'keystone.admin.navItem.icon',
+                                            filteredItem.icon,
+                                            filteredItem,
+                                        ),
+                                    };
                                     const parentActive = isActive(currentPath, item.href);
                                     // Child match: pick the most-specific child whose
                                     // href is a path-prefix of currentPath. This
@@ -239,9 +270,18 @@ function Sidebar({
                                             : defaultOpen;
                                     const showChildren =
                                         !collapsed && hasChildren && expanded;
+                                    // The active row's label uses full-strength
+                                    // chrome foreground, not the accent (#193):
+                                    // the accent is clamped to the 3:1 floor for
+                                    // graphical objects against the flat sidebar,
+                                    // and the active row's tinted background
+                                    // lightens it further — the default cyan
+                                    // measured 3.3:1 for 14px text, under the
+                                    // 4.5:1 AA floor. Hue stays on the icon and
+                                    // the background, where 3:1 is the right bar.
                                     const parentSharedClasses = `group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
                                         sectionActive
-                                            ? 'bg-[var(--chrome-active-bg)] text-[var(--chrome-active-fg)]'
+                                            ? 'bg-[var(--chrome-active-bg)] text-[var(--chrome-fg)]'
                                             : 'text-[var(--chrome-fg-muted)] hover:bg-[var(--chrome-hover-bg)] hover:text-[var(--chrome-fg)]'
                                     } ${collapsed ? 'justify-center' : ''}`;
                                     const iconClasses = sectionActive
@@ -345,10 +385,14 @@ function Sidebar({
                         </div>
                     ))}
                 </nav>
-                {!collapsed && (
-                    <div className="border-t border-[var(--chrome-border)] px-4 py-3 text-[10px] font-semibold tracking-[0.14em] uppercase text-[var(--chrome-fg-subtle)]">
-                        Keystone CMS · v0.1
-                    </div>
+                {applyFilters<ReactNode>(
+                    'keystone.admin.sidebar.footer',
+                    !collapsed ? (
+                        <div className="border-t border-[var(--chrome-border)] px-4 py-3 text-[10px] font-semibold tracking-[0.14em] uppercase text-[var(--chrome-fg-subtle)]">
+                            Keystone CMS · v{version}
+                        </div>
+                    ) : null,
+                    { collapsed, version },
                 )}
             </aside>
         </>
@@ -366,6 +410,12 @@ function NotificationsPanel({
     onMarkOneRead: (id: number) => void;
     onViewAll: () => void;
 }) {
+    // `notifications` is ALREADY passed through both
+    // `keystone.admin.notifications.list` and `keystone.admin.notifications.item`
+    // by KeystoneAdminLayout so the topbar bell badge and this panel
+    // see the same set — a per-item filter here would double-apply and
+    // let the two counts diverge.
+
     const grouped = useMemo(() => {
         const byDay: Record<string, NotificationItem[]> = {};
         for (const n of notifications.slice(0, 8)) {
@@ -444,6 +494,35 @@ function NotificationsPanel({
     );
 }
 
+/**
+ * A global admin keybinding. Registered by default (Cmd/Ctrl+K opens
+ * the palette) and extensible via `keystone.admin.keybindings`.
+ * `meta` and `ctrl` are OR'd when both are `true` so Cmd on macOS and
+ * Ctrl elsewhere match the same binding; `shift` and `alt` are strict
+ * match when set.
+ */
+export interface Keybinding {
+    key:     string;
+    meta?:   boolean;
+    ctrl?:   boolean;
+    shift?:  boolean;
+    alt?:    boolean;
+    handler: (event: KeyboardEvent) => void;
+}
+
+/**
+ * A single row in the user-menu dropdown between the identity header and
+ * the sign-out button. Rendered from the built-in `[{ … }]` list and any
+ * items appended/rewritten by `keystone.admin.userMenu.items` filter
+ * subscribers.
+ */
+export interface UserMenuItem {
+    key:      string;
+    label:    string;
+    href?:    string;
+    onClick?: () => void;
+}
+
 function UserMenu({
     me,
     open,
@@ -453,6 +532,38 @@ function UserMenu({
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }) {
+    // Memoize so the default value handed to the filter has a stable
+    // identity across renders — a subscriber that keys a `useMemo` on
+    // the initial ReactNode would otherwise re-run on every parent
+    // render.
+    const defaultAvatar: ReactNode = useMemo(
+        () => (
+            <Avatar
+                image={me.photo_url ?? undefined}
+                placeholder={me.initials}
+                alt={me.name}
+                color="primary"
+                size="xs"
+            />
+        ),
+        [me.photo_url, me.initials, me.name],
+    );
+    // Plugins can swap the avatar entirely (e.g. render an initials-only
+    // fallback with a role indicator badge) via `keystone.admin.userMenu.avatar`.
+    // Args: `(ReactNode, me)`.
+    const avatar = applyFilters<ReactNode>('keystone.admin.userMenu.avatar', defaultAvatar, me);
+
+    const defaultItems: UserMenuItem[] = useMemo(() => [
+        { key: 'profile', label: 'Account settings', href: admin.profile().url },
+    ], []);
+    // `keystone.admin.userMenu.items` — plugins can append / re-order the
+    // profile-and-settings section between the identity header and the
+    // sign-out button. Args: `(UserMenuItem[], me)`.
+    const items = useMemo(
+        () => applyFilters<UserMenuItem[]>('keystone.admin.userMenu.items', defaultItems, me),
+        [defaultItems, me],
+    );
+
     return (
         <div className="relative">
             <button
@@ -460,13 +571,7 @@ function UserMenu({
                 onClick={() => onOpenChange(!open)}
                 className="flex items-center gap-2 rounded-lg p-1 pr-2 hover:bg-[var(--chrome-hover-bg)]"
             >
-                <Avatar
-                    image={me.photo_url ?? undefined}
-                    placeholder={me.initials}
-                    alt={me.name}
-                    color="primary"
-                    size="xs"
-                />
+                {avatar}
                 <span className="hidden text-xs font-semibold text-[var(--chrome-fg)] sm:inline">
                     {me.name.split(' ')[0]}
                 </span>
@@ -479,11 +584,23 @@ function UserMenu({
                         <div className="text-xs text-base-content/55">{me.email}</div>
                     </div>
                     <ul className="py-1.5 text-sm">
-                        <li>
-                            <Link href={admin.profile().url} className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-base-200">
-                                Account settings
-                            </Link>
-                        </li>
+                        {items.map((item) => (
+                            <li key={item.key}>
+                                {item.href ? (
+                                    <Link href={item.href} className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-base-200">
+                                        {item.label}
+                                    </Link>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={item.onClick}
+                                        className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-base-200"
+                                    >
+                                        {item.label}
+                                    </button>
+                                )}
+                            </li>
+                        ))}
                     </ul>
                     <div className="border-t border-base-300/60 py-1.5">
                         <button
@@ -533,10 +650,12 @@ function Topbar({
             >
                 {Icon.panelLeft}
             </button>
-            <div className="flex flex-1 items-center">
+            <div className="flex flex-1 items-center gap-2">
+                {applyFilters<ReactNode>('keystone.admin.topbar.left', null)}
                 <SearchTrigger onClick={onSearchClick} />
             </div>
             <div className="flex items-center gap-2">
+                {applyFilters<ReactNode>('keystone.admin.topbar.right', null)}
                 <ThemeButton
                     resolvedColorScheme={resolvedColorScheme as 'light' | 'dark'}
                     onToggle={() => setColorScheme(resolvedColorScheme === 'dark' ? 'light' : 'dark')}
@@ -589,6 +708,34 @@ export default function KeystoneAdminLayout({ children }: { children: ReactNode 
         setNotifications(keystone.notifications);
     }, [keystone.notifications]);
 
+    // Plugins can decorate / filter the notifications list (dedupe, inject
+    // synthetic items, hide low-priority notices) via
+    // `keystone.admin.notifications.list`, or rewrite / drop individual
+    // rows via the per-item `keystone.admin.notifications.item` filter.
+    // Both are applied HERE so the topbar bell badge and the notifications
+    // panel below consume the same filtered set — otherwise the badge's
+    // "N unread" count and the panel's rendered rows can disagree.
+    // The filters run on every render rather than at set-time so the
+    // polled + prop-synced sources both flow through them, and so filter
+    // callbacks registered after mount pick up on the next render.
+    const displayedNotifications = useMemo(() => {
+        const listed = applyFilters<NotificationItem[]>(
+            'keystone.admin.notifications.list',
+            notifications,
+        );
+
+        if (!Array.isArray(listed)) {
+            return notifications;
+        }
+
+        return listed
+            .map((item) => applyFilters<NotificationItem | null>(
+                'keystone.admin.notifications.item',
+                item,
+            ))
+            .filter((item): item is NotificationItem => null != item);
+    }, [notifications]);
+
     // Poll for fresh notifications every 30s while the tab is visible so the
     // bell badge picks up new notifications (and dropped unread counts from
     // other devices) without a page refresh. Skipped for guests since the
@@ -630,47 +777,114 @@ export default function KeystoneAdminLayout({ children }: { children: ReactNode 
     }, [isAuthenticated]);
 
     const currentPath = page.url.split('?')[0];
+    // Plugins may add / re-order / remove entire nav groups by subscribing to
+    // `keystone.admin.navGroups`. Callbacks receive the built-in groups and
+    // return the (possibly mutated) replacement. Runs inside useMemo so we
+    // don't re-invoke the filter chain on every render — new callbacks
+    // registered after mount pick up on the next `keystone.adminMenu`
+    // change or a full navigation.
     const navGroups = useMemo(
-        () => navGroupsFromAdminMenu(keystone.adminMenu),
+        () => applyFilters<NavGroup[]>(
+            'keystone.admin.navGroups',
+            navGroupsFromAdminMenu(keystone.adminMenu),
+        ),
         [keystone.adminMenu],
     );
 
+    // Global keybindings — Cmd/Ctrl+K opens the command palette by default.
+    // Plugins can register additional shortcuts through
+    // `keystone.admin.keybindings`. Args: `(Keybinding[])`. Each binding
+    // matches on `key` (case-insensitive) plus optional modifier flags;
+    // duplicates run in registration order.
+    const keybindings = useMemo<Keybinding[]>(
+        () => applyFilters<Keybinding[]>('keystone.admin.keybindings', [
+            {
+                key:  'k',
+                meta: true,
+                ctrl: true,
+                handler(event) {
+                    event.preventDefault();
+                    setPaletteOpen((v) => !v);
+                },
+            },
+        ]),
+        [],
+    );
     useEffect(() => {
         function onKey(e: KeyboardEvent) {
-            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-                e.preventDefault();
-                setPaletteOpen((v) => !v);
+            // Skip when the user is typing into an editable surface — the
+            // extensible keybindings surface means a plugin could register
+            // a bare-key shortcut (e.g. `"n"` for "new post"), and we
+            // don't want that to hijack a keystroke inside an <input>,
+            // <textarea>, <select>, or contentEditable node. The built-in
+            // Cmd/Ctrl+K binding requires modifiers so this doesn't
+            // regress the palette shortcut in text fields.
+            const target = e.target as HTMLElement | null;
+            const isEditable =
+                target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                target instanceof HTMLSelectElement ||
+                target?.isContentEditable === true;
+            if (isEditable) return;
+
+            const pressed = e.key.toLowerCase();
+            for (const binding of keybindings) {
+                if (binding.key.toLowerCase() !== pressed) continue;
+                // meta / ctrl are treated as OR when both true so
+                // Cmd+K on macOS and Ctrl+K elsewhere both match.
+                // A modifier-less binding must ALSO require the actual
+                // modifier keys to be unset — otherwise a `"s"` binding
+                // would also fire on Cmd+S / Ctrl+S and stomp on browser
+                // or plugin-owned shortcuts.
+                const modOk = (binding.meta && e.metaKey) || (binding.ctrl && e.ctrlKey)
+                    || (!binding.meta && !binding.ctrl && !e.metaKey && !e.ctrlKey);
+                if (!modOk) continue;
+                if (binding.shift !== undefined && binding.shift !== e.shiftKey) continue;
+                if (binding.alt !== undefined && binding.alt !== e.altKey) continue;
+                binding.handler(e);
             }
         }
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, []);
+    }, [keybindings]);
+
+    // Fire `keystone.admin.commandPalette.open` once each time the palette
+    // transitions closed→open so analytics adapters can log the impression
+    // without polling. Effect skipped on the initial `false` render.
+    useEffect(() => {
+        if (paletteOpen) {
+            doAction('keystone.admin.commandPalette.open');
+        }
+    }, [paletteOpen]);
 
     const paletteItems: CommandPaletteItem[] = useMemo(
         () =>
-            navGroups.flatMap((g) =>
-                g.items.flatMap((it) => {
-                    const parent: CommandPaletteItem = {
-                        label: it.label,
-                        kind: 'Page',
-                        icon: it.icon,
-                        // `external` items aren't Inertia pages — a
-                        // full page load, not an Inertia visit.
-                        onSelect: () =>
-                            it.external
-                                ? (window.location.href = it.href)
-                                : router.visit(it.href),
-                    };
-                    const children: CommandPaletteItem[] = (it.children ?? []).map(
-                        (child) => ({
-                            label: `${it.label} → ${child.label}`,
+            applyFilters<CommandPaletteItem[]>(
+                'keystone.admin.commandPalette.items',
+                navGroups.flatMap((g) =>
+                    g.items.flatMap((it) => {
+                        const parent: CommandPaletteItem = {
+                            label: it.label,
                             kind: 'Page',
                             icon: it.icon,
-                            onSelect: () => router.visit(child.href),
-                        }),
-                    );
-                    return [parent, ...children];
-                }),
+                            // `external` items aren't Inertia pages — a
+                            // full page load, not an Inertia visit.
+                            onSelect: () =>
+                                it.external
+                                    ? (window.location.href = it.href)
+                                    : router.visit(it.href),
+                        };
+                        const children: CommandPaletteItem[] = (it.children ?? []).map(
+                            (child) => ({
+                                label: `${it.label} → ${child.label}`,
+                                kind: 'Page',
+                                icon: it.icon,
+                                onSelect: () => router.visit(child.href),
+                            }),
+                        );
+                        return [parent, ...children];
+                    }),
+                ),
             ),
         [navGroups],
     );
@@ -687,6 +901,7 @@ export default function KeystoneAdminLayout({ children }: { children: ReactNode 
         });
         try {
             await markAllNotificationsAsRead();
+            doAction('keystone.admin.notifications.markAllRead', flippedIds);
         } catch (error) {
             console.error('Failed to mark all notifications as read', error);
             const idsToRevert = new Set(flippedIds);
@@ -711,6 +926,7 @@ export default function KeystoneAdminLayout({ children }: { children: ReactNode 
         }
         try {
             await markNotificationAsRead(id);
+            doAction('keystone.admin.notifications.markRead', id);
         } catch (error) {
             console.error('Failed to mark notification as read', error);
             setNotifications((prev) =>
@@ -719,7 +935,12 @@ export default function KeystoneAdminLayout({ children }: { children: ReactNode 
         }
     }, []);
 
-    return (
+    // `keystone.admin.layout.wrap` runs on every render so plugin callbacks
+    // registered after mount pick up on the next React commit. Callbacks
+    // receive the built-in layout tree and can wrap it (floating widget,
+    // debug pane, global banner) without forking the layout file.
+    return applyFilters<ReactNode>(
+        'keystone.admin.layout.wrap',
         <div className="flex min-h-screen bg-base-200/50 font-sans text-base-content">
             <Sidebar
                 collapsed={collapsed}
@@ -729,11 +950,12 @@ export default function KeystoneAdminLayout({ children }: { children: ReactNode 
                 onMobileClose={() => setMobileOpen(false)}
                 navGroups={navGroups}
                 brand={keystone.brand}
+                version={keystone.version}
             />
             <div className="flex min-w-0 flex-1 flex-col">
                 <Topbar
                     me={me}
-                    notifications={notifications}
+                    notifications={displayedNotifications}
                     onSearchClick={() => setPaletteOpen(true)}
                     onSidebarOpen={() => setMobileOpen(true)}
                     onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
@@ -742,6 +964,6 @@ export default function KeystoneAdminLayout({ children }: { children: ReactNode 
                 <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
             </div>
             <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={paletteItems} />
-        </div>
+        </div>,
     );
 }

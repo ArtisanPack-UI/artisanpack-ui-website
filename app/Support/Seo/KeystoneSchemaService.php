@@ -65,7 +65,15 @@ class KeystoneSchemaService extends SchemaService
             $data = array_merge($data, $seoMeta->schema_markup);
         }
 
-        return $data;
+        $filtered = applyFilters('keystone.seo.schema.data', $data, $model, $seoMeta);
+
+        // Guarded: a subscriber returning a non-array would throw at
+        // the sink and blank the head-rendered JSON-LD. Fall back to
+        // the pre-filter data on invalid output.
+        /** @var array<string, mixed> $result */
+        $result = is_array($filtered) ? $filtered : $data;
+
+        return $result;
     }
 
     /**

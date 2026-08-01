@@ -1,0 +1,8 @@
+# Paths tracked for developer convenience but kept out of exported source.
+#
+# `export-ignore` only applies to `git archive` — GitLab's "Download source
+# code" buttons and Composer's dist zipballs. The release artifact consumed
+# by cms-framework's self-updater is built by the `build_release` job in
+# `.gitlab-ci.yml`, which zips the CI working tree directly; anything listed
+# here must ALSO be added to that job's `-x` exclusion list or it ships.
+solo.yml export-ignore

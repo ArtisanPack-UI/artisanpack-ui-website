@@ -71,6 +71,8 @@ class UserController extends Controller
 
         $this->syncRoles($user, $validated['roles'] ?? []);
 
+        doAction('keystone.admin.users.created', $user);
+
         return redirect()->route('admin.users.index')->with('success', 'User created.');
     }
 
@@ -118,7 +120,19 @@ class UserController extends Controller
 
         $user->save();
 
+        $previousSlugs = $user->roles()->pluck('slug')->all();
+        sort($previousSlugs);
+
         $this->syncRoles($user, $validated['roles'] ?? []);
+
+        $newSlugs = $user->roles()->pluck('slug')->all();
+        sort($newSlugs);
+
+        doAction('keystone.admin.users.updated', $user);
+
+        if ($previousSlugs !== $newSlugs) {
+            doAction('keystone.admin.users.rolesChanged', $user, $previousSlugs, $newSlugs);
+        }
 
         return redirect()->route('admin.users.index')->with('success', 'User updated.');
     }
@@ -131,7 +145,11 @@ class UserController extends Controller
             return redirect()->route('admin.users.index')->with('error', 'You cannot delete your own account.');
         }
 
+        doAction('keystone.admin.users.deleting', $user);
+
         $user->delete();
+
+        doAction('keystone.admin.users.deleted', $user);
 
         return redirect()->route('admin.users.index')->with('success', 'User deleted.');
     }
@@ -159,11 +177,21 @@ class UserController extends Controller
     {
         $user = $request->user();
 
-        if ($user && $user->hasRole('admin')) {
-            return Role::query()->pluck('slug')->all();
+        $slugs = ($user && $user->hasRole('admin'))
+            ? Role::query()->pluck('slug')->all()
+            : ['editor'];
+
+        // Filter return is `mixed` per the hooks package contract, so a
+        // subscriber that forgets to return, or returns a non-array,
+        // must not blow up the admin create/edit screen. Fall back to
+        // the pre-filter list in that case.
+        $filtered = applyFilters('keystone.admin.users.assignableRoles', $slugs, $user);
+
+        if (! is_array($filtered)) {
+            $filtered = $slugs;
         }
 
-        return ['editor'];
+        return array_values(array_map('strval', $filtered));
     }
 
     /**

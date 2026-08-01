@@ -34,7 +34,16 @@ export type SlotName =
     | 'sidebar-bottom'
     | 'tabs'
     | 'before-editor'
-    | 'after-editor';
+    | 'after-editor'
+    // `before-form` / `after-form` are client-only slots — the PHP
+    // `PanelSlotSupport` payload doesn't ship entries for them yet, so
+    // the initial list is empty and only the
+    // `keystone.admin.panels.entries` filter can populate them. Kept as
+    // first-class slot names so plugins have a stable extension point
+    // above / below the entire form even before the server-side bucket
+    // lands.
+    | 'before-form'
+    | 'after-form';
 
 /**
  * Shape of a panel record shipped to the panel body when it renders.

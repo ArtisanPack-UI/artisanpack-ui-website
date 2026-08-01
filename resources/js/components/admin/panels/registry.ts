@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { doAction } from '@artisanpack-ui/hooks-js';
 import type { ContentEditEntry, PanelContext } from './types';
 
 /**
@@ -29,7 +30,19 @@ export function registerAdminEditPanel(
     identifier: string,
     component: ComponentType<PanelComponentProps>,
 ): void {
+    // Fire the pre-write `keystone.admin.panels.register` action so plugins
+    // can observe registrations as they happen (e.g. to build a plugin →
+    // panel index) BEFORE the registry mutation. Paired with the post-write
+    // `keystone.admin.panels.registered` action below — the pair mirrors
+    // the pre/post shape used elsewhere in the admin so subscribers that
+    // need to decorate a component reference can bind to the pre-hook and
+    // subscribers that just need the completed identifier can bind to the
+    // post-hook. Args: `(identifier, component)`.
+    doAction('keystone.admin.panels.register', identifier, component);
     BUILTIN_PANELS.set(identifier, component);
+    // Fire `keystone.admin.panels.registered` so plugins can enumerate
+    // what's available at any point after boot. Args: `(identifier)`.
+    doAction('keystone.admin.panels.registered', identifier);
 }
 
 export function resolveBuiltinPanel(

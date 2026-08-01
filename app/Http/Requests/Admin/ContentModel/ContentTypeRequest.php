@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin\ContentModel;
 
+use App\Support\ContentModel\ContentTypeTables;
 use App\Support\ContentModel\SpecializedContentTypes;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\SupportsFeature;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Models\DynamicContentRecord;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -51,6 +54,12 @@ class ContentTypeRequest extends FormRequest
                 // (e.g. `posts`) and steer the visual editor at the
                 // wrong table.
                 Rule::notIn($this->registeredContentTypeSlugs()),
+                // The slug is only half the collision surface — the table
+                // name derived from it is the other half, and it is the
+                // one with teeth. `user` derives onto `users`, `medium`
+                // onto `media`; provisioning would then ALTER that table
+                // and the generic record controller would CRUD rows in it.
+                $this->derivedTableIsAvailable(...),
             ],
             'description'   => ['nullable', 'string'],
             'icon'          => ['nullable', 'string', Rule::in(self::iconOptions())],
@@ -69,25 +78,15 @@ class ContentTypeRequest extends FormRequest
     }
 
     /**
-     * Feature flags a content type may declare. Matches the framework's
-     * validation list — sourced from `ContentTypeRequest::supports`.
+     * Feature flags a content type may declare. Sourced from the framework's
+     * canonical {@see SupportsFeature} vocabulary — `title` is always on and
+     * appears here for the admin UI's completeness rather than as an opt-in.
      *
      * @return list<string>
      */
     public static function supportsOptions(): array
     {
-        return [
-            'title',
-            'content',
-            'excerpt',
-            'featured_image',
-            'author',
-            'thumbnail',
-            'comments',
-            'revisions',
-            'page_attributes',
-            'custom_fields',
-        ];
+        return SupportsFeature::values();
     }
 
     /**
@@ -115,6 +114,41 @@ class ContentTypeRequest extends FormRequest
             'customers', 'forms', 'site', 'settings', 'users',
             'integrations', 'reports', 'activity', 'bell', 'upload', 'edit',
         ];
+    }
+
+    /**
+     * Closure rule: reject a slug whose derived records table is already
+     * taken by something this feature didn't create.
+     *
+     * Only meaningful on create — `update()` never changes the slug (and
+     * therefore never re-derives the table), so an edit to an existing
+     * type must not fail on the table it already legitimately owns.
+     *
+     * @param  Closure(string): void  $fail
+     */
+    protected function derivedTableIsAvailable(string $attribute, mixed $value, Closure $fail): void
+    {
+        if (! $this->isMethod('POST') || ! is_string($value) || '' === $value) {
+            return;
+        }
+
+        if (ContentTypeTables::claimableBy($value)) {
+            return;
+        }
+
+        $table = ContentTypeTables::derive($value);
+        $owner = ContentTypeTables::ownerSlug($table);
+
+        $fail(null !== $owner
+            ? __('The slug ":slug" conflicts with the existing content type ":owner" — both use the ":table" table.', [
+                'slug'  => $value,
+                'owner' => $owner,
+                'table' => $table,
+            ])
+            : __('The slug ":slug" conflicts with an existing ":table" table.', [
+                'slug'  => $value,
+                'table' => $table,
+            ]));
     }
 
     /**

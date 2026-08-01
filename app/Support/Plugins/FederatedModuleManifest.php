@@ -20,16 +20,32 @@ use App\Services\Plugins\PluginUpdateUrlGuard;
  * resolver can do a single O(1) lookup and hand off to the federated
  * loader.
  *
- * Output shape (per page):
+ * Output shape:
  *
  *     [
- *         'plugins/hello-world/dashboard' => [
- *             'remote' => 'hello-world',
- *             'entry'  => 'https://…/remoteEntry.js',
- *             'module' => './dashboard',
+ *         'pages' => [
+ *             'plugins/hello-world/dashboard' => [
+ *                 'remote' => 'hello-world',
+ *                 'entry'  => 'https://…/remoteEntry.js',
+ *                 'module' => './dashboard',
+ *             ],
+ *             …
  *         ],
- *         …
+ *         'bootModules' => [
+ *             [
+ *                 'remote' => 'hello-world',
+ *                 'entry'  => 'https://…/remoteEntry.js',
+ *                 'module' => './boot',
+ *             ],
+ *             …
+ *         ],
  *     ]
+ *
+ * `pages` is consumed by the Inertia resolver to hand off unknown page names
+ * to the federation runtime. `bootModules` is preloaded by the app shell
+ * BEFORE the first page mounts so plugin-registered hook callbacks
+ * (`addAction`/`addFilter` in the boot module's top-level side effects) bind
+ * before the shell reads them via `applyFilters`.
  *
  * Trust boundary: descriptors come from active plugins whose code
  * ostensibly ran in-process to register with the framework, but a plugin
@@ -57,16 +73,20 @@ class FederatedModuleManifest
     ) {}
 
     /**
-     * Transform the raw `ap.plugins.federatedModules` filter payload into a
-     * page-name-keyed map for the Inertia resolver.
+     * Transform the raw `ap.plugins.federatedModules` filter payload into the
+     * page/boot manifest the client shell consumes.
      *
-     * @param  array<string, array{entry?: mixed, exposes?: mixed}>  $registry
+     * @param  array<string, array{entry?: mixed, exposes?: mixed, bootModule?: mixed}>  $registry
      *
-     * @return array<string, array{remote: string, entry: string, module: string}>
+     * @return array{
+     *     pages: array<string, array{remote: string, entry: string, module: string}>,
+     *     bootModules: list<array{remote: string, entry: string, module: string}>,
+     * }
      */
     public function build(array $registry): array
     {
-        $manifest = [];
+        $pages       = [];
+        $bootModules = [];
 
         foreach ($registry as $remote => $descriptor) {
             if (! is_string($remote) || '' === $remote || ! $this->isSafeIdentifier($remote)) {
@@ -80,8 +100,9 @@ class FederatedModuleManifest
                 continue;
             }
 
-            $entry   = $descriptor['entry'] ?? null;
-            $exposes = $descriptor['exposes'] ?? [];
+            $entry      = $descriptor['entry'] ?? null;
+            $exposes    = $descriptor['exposes'] ?? [];
+            $bootModule = $descriptor['bootModule'] ?? null;
 
             if (! is_string($entry) || '' === $entry || ! $this->urlGuard->isAllowed($entry)) {
                 continue;
@@ -102,15 +123,32 @@ class FederatedModuleManifest
                     continue;
                 }
 
-                $manifest[sprintf('plugins/%s/%s', $remote, $normalized)] = [
+                $pages[sprintf('plugins/%s/%s', $remote, $normalized)] = [
                     'remote' => $remote,
                     'entry'  => $entry,
                     'module' => $exposed,
                 ];
             }
+
+            // A plugin declares its `bootModule` as the exposed module id it
+            // wants preloaded (e.g. `./boot`). It does NOT need to also be
+            // listed in `exposes` — boot modules are side-effect-only, not
+            // page components, so the Inertia resolver never asks for them
+            // by page name. We still validate the shape and guard against
+            // path-traversal in the derived remote name.
+            if (is_string($bootModule) && '' !== $bootModule) {
+                $bootModules[] = [
+                    'remote' => $remote,
+                    'entry'  => $entry,
+                    'module' => $bootModule,
+                ];
+            }
         }
 
-        return $manifest;
+        return [
+            'pages'       => $pages,
+            'bootModules' => $bootModules,
+        ];
     }
 
     /**

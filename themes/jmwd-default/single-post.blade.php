@@ -29,8 +29,14 @@
     @if ($activeTheme)
         <link rel="stylesheet" href="{{ route('themes.asset', ['theme' => $activeTheme, 'path' => 'style.css']) }}">
     @endif
+
+    {{-- Plugin injection zone: WP-style `wp_head` analog. --}}
+    @action('keystone.public.head')
 </head>
 <body>
+    {{-- Plugin injection zone: WP-style `wp_body_open` analog. --}}
+    @action('keystone.public.bodyOpen')
+
     <x-ve-blocks :tree="$headerBlocks" :default-theme="$activeTheme" :post="$post" />
 
     @if (session('comment_success') || session('comment_error'))
@@ -54,14 +60,39 @@
             <x-ve-blocks :tree="$templateBlocks" :default-theme="$activeTheme" :post="$post" />
         @else
             {{-- Fallback when no `single` template is authored yet:
-                 render the post's own block content directly. The post-*
-                 entity blocks won't have any place to resolve from in
-                 this path — the template-authored layout is required
-                 for the FSE-style render. --}}
+                 render the post's own title and block content directly.
+                 The post-* entity blocks won't have any place to
+                 resolve from in this path — the template-authored
+                 layout is required for the FSE-style render.
+
+                 The `keystone.public.post.title` and `.post.content`
+                 filters give plugin authors the WP `the_title` /
+                 `the_content` analogs on the theme-authored render
+                 path. --}}
+            {{-- Escape the filtered title at the sink. `@filter` echoes the
+                 raw `applyFilters` return value, which would otherwise
+                 create a stored XSS surface for any editor able to author
+                 a post title. Filter subscribers can still transform the
+                 string; they just can't inject HTML. --}}
+            <h1 class="entry-title">{{ applyFilters('keystone.public.post.title', $post->title, $post) }}</h1>
+            @php
+                ob_start();
+            @endphp
             <x-ve-blocks :tree="$post->getBlockContent()" :default-theme="$activeTheme" :post="$post" />
+            @php
+                $keystonePostContentHtml = (string) ob_get_clean();
+            @endphp
+            {!! applyFilters('keystone.public.post.content', $keystonePostContentHtml, $post) !!}
         @endif
     </main>
 
     <x-ve-blocks :tree="$footerBlocks" :default-theme="$activeTheme" :post="$post" />
+
+    {{-- Plugin injection zone: WP-style `wp_enqueue_scripts` analog. --}}
+    @action('keystone.public.enqueueScripts')
+    @stack('scripts')
+
+    {{-- Plugin injection zone: WP-style `wp_footer` analog. --}}
+    @action('keystone.public.footer')
 </body>
 </html>

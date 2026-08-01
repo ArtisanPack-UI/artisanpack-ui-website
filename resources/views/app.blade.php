@@ -19,8 +19,17 @@
         @viteReactRefresh
         @vite(['resources/css/app.css', 'resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
         @inertiaHead
+
+        {{-- Plugin injection zone: everything else the admin shell needs
+             in <head> (meta, preconnects, ad-hoc stylesheets). --}}
+        @action('keystone.admin.shell.head')
     </head>
     <body class="font-sans antialiased bg-base-200 text-base-content">
+        {{-- Plugin injection zone: fires immediately after <body>
+             opens on the admin shell (skip-nav targets, top-of-page
+             pixels, banner overlays). --}}
+        @action('keystone.admin.shell.bodyOpen')
+
         @inertia
 
         {{-- Web Vitals RUM collector (artisanpack-ui/performance).
@@ -71,5 +80,10 @@
                 })();
             </script>
         @endif
+
+        {{-- Plugin injection zone: last thing before </body> on the
+             admin shell (deferred scripts, session-scoped
+             notifications, closing pixels). --}}
+        @action('keystone.admin.shell.footer')
     </body>
 </html>

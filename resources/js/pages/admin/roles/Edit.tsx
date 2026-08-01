@@ -1,9 +1,9 @@
-import type { FormEvent, ReactNode } from 'react';
+import { useMemo, type FormEvent, type ReactNode } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Card, PageHeader } from '@/components/admin/keystone';
 import {
-    CheckboxList,
     Field,
     PrimaryButton,
     TextInput,
@@ -13,6 +13,13 @@ import { index, update } from '@/routes/admin/roles';
 interface PermissionOption {
     slug: string;
     name: string;
+    description?: string | null;
+}
+
+interface PermissionGroup {
+    /** Group heading shown above its items. `null` renders as a plain list. */
+    label: string | null;
+    items: PermissionOption[];
 }
 
 interface EditProps {
@@ -59,6 +66,20 @@ export default function Edit({ role, permissions }: EditProps) {
     const permissionsError =
         form.errors.permissions ??
         Object.entries(form.errors).find(([key]) => key.startsWith('permissions.'))?.[1];
+
+    // Group the flat permission list before rendering. The built-in
+    // shape is a single unlabeled group; `.roles.permissions.groups`
+    // lets a plugin split by prefix (e.g. `posts.*` → "Posts") or
+    // hide entire clusters behind a feature flag. Args:
+    // `(PermissionGroup[], { role, permissions })`.
+    const groups = useMemo(
+        () => applyFilters<PermissionGroup[]>(
+            'keystone.admin.roles.permissions.groups',
+            [{ label: null, items: permissions }],
+            { role, permissions },
+        ),
+        [permissions, role],
+    );
 
     return (
         <>
@@ -114,12 +135,73 @@ export default function Edit({ role, permissions }: EditProps) {
                                 Choose which permissions this role grants.
                             </p>
                         </div>
-                        <CheckboxList
-                            options={permissions}
-                            selected={form.data.permissions}
-                            onToggle={togglePermission}
-                            error={permissionsError}
-                        />
+                        <div>
+                            <div className="flex max-h-96 flex-col gap-4 overflow-y-auto rounded-lg border border-base-300/60 bg-base-100 p-3">
+                                {groups.length === 0 && (
+                                    <span className="text-xs text-base-content/45">No options available.</span>
+                                )}
+                                {groups.map((group: PermissionGroup, groupIndex: number) => (
+                                    <div key={group.label ?? `group-${groupIndex}`} className="flex flex-col gap-2">
+                                        {group.label && (
+                                            <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/55">
+                                                {group.label}
+                                            </h3>
+                                        )}
+                                        {group.items.map((opt: PermissionOption) => {
+                                            const isSelected = form.data.permissions.includes(opt.slug);
+                                            // Default row body — checkbox + name/slug + description.
+                                            // `.roles.permissions.row` wraps this so a plugin can
+                                            // hide a permission, insert a "Recommended" pill, or
+                                            // swap the entire row for a plugin-owned control. Return
+                                            // `null` to drop the row silently. Args: `(ReactNode,
+                                            // { permission, group, selected, toggle })`.
+                                            const rowBody: ReactNode = (
+                                                <label
+                                                    className="flex cursor-pointer items-start gap-3 rounded-md px-1 py-1 hover:bg-base-200/60"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={() => togglePermission(opt.slug)}
+                                                        className="mt-0.5 h-4 w-4 rounded border-base-300/60 text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="min-w-0">
+                                                        <span className="block text-sm font-medium text-base-content">
+                                                            {opt.name}{' '}
+                                                            <code className="text-[11px] font-normal text-base-content/55">
+                                                                {opt.slug}
+                                                            </code>
+                                                        </span>
+                                                        {opt.description && (
+                                                            <span className="block text-[11px] text-base-content/55">
+                                                                {opt.description}
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                </label>
+                                            );
+
+                                            const filteredRow = applyFilters<ReactNode>(
+                                                'keystone.admin.roles.permissions.row',
+                                                rowBody,
+                                                {
+                                                    permission: opt,
+                                                    group,
+                                                    selected: isSelected,
+                                                    toggle: () => togglePermission(opt.slug),
+                                                },
+                                            );
+
+                                            if (filteredRow === null) {
+                                                return null;
+                                            }
+                                            return <div key={opt.slug}>{filteredRow}</div>;
+                                        })}
+                                    </div>
+                                ))}
+                            </div>
+                            {permissionsError && <p className="mt-1.5 text-[11px] text-error">{permissionsError}</p>}
+                        </div>
                     </Card>
 
                     <div className="flex items-center justify-end gap-2">

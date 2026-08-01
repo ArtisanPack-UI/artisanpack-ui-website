@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { applyFilters } from '@artisanpack-ui/hooks-js';
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { Card, PageHeader } from '@/components/admin/keystone';
 import { Field, PrimaryButton, TextInput } from '@/components/admin/keystone-form';
@@ -364,6 +365,21 @@ export default function BusinessInfo() {
                         )}
                     </div>
                 </Card>
+
+                {applyFilters<ReactNode>(
+                    // Slot rendered after every built-in business-info card so
+                    // a plugin can append additional field groups (VAT / tax
+                    // ID, alternate contact roles, region-specific fields)
+                    // without forking this page. Starting value is `null`.
+                    // Plugins receive the raw `useForm` handle so they can
+                    // both read and write registered form fields — the
+                    // server accepts extra keys silently, so wire your
+                    // controller-side validation before shipping.
+                    // Args: `(ReactNode, { form })`.
+                    'keystone.admin.siteDesign.businessInfo.fields',
+                    null,
+                    { form },
+                )}
 
                 <div className="flex justify-end">
                     <PrimaryButton loading={form.processing}>

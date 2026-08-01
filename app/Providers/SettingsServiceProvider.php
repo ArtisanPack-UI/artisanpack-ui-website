@@ -172,7 +172,7 @@ class SettingsServiceProvider extends ServiceProvider
     {
         $settings->registerSetting('admin.primaryColor', '#0855b1', 'sanitizeText', SettingType::String);
         $settings->registerSetting('admin.secondaryColor', '#010e54', 'sanitizeText', SettingType::String);
-        $settings->registerSetting('admin.accentColor', '#04d9ff', 'sanitizeText', SettingType::String);
+        $settings->registerSetting('admin.accentColor', '#0891b2', 'sanitizeText', SettingType::String);
         $settings->registerSetting('admin.forceTheme', 'system', 'sanitizeText', SettingType::String);
     }
 
