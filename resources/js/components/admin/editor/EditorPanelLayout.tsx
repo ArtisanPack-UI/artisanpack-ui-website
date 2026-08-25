@@ -1,4 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import {
+    useEffect,
+    useRef,
+    useState,
+    type KeyboardEvent as ReactKeyboardEvent,
+    type ReactNode,
+} from 'react';
 import {
     DndContext,
     MeasuringStrategy,
@@ -25,6 +31,7 @@ import {
     type EditorColumn,
     type UseEditorLayoutResult,
 } from '@/components/admin/editor/useEditorLayout';
+import { type EditorViewMode } from '@/lib/admin/editorChrome';
 
 /**
  * The panel hoisted to the top of the stack, and pinned there, once the
@@ -107,6 +114,17 @@ export interface EditorPanelLayoutProps {
     sidebarTop?: ReactNode;
     /** Plugin slot rendered below the sidebar panels. */
     sidebarBottom?: ReactNode;
+    /**
+     * Editor chrome view mode (issue #239). `normal` and `full-width` render
+     * the two-column grid (full-width simply gets more room once the admin
+     * sidebar is hidden); `distraction-free` collapses to one column and
+     * moves the settings sidebar into a slide-over drawer.
+     */
+    viewMode?: EditorViewMode;
+    /** Whether the distraction-free settings drawer is open. */
+    settingsOpen?: boolean;
+    /** Close the distraction-free settings drawer. */
+    onCloseSettings?: () => void;
 }
 
 /**
@@ -132,6 +150,9 @@ export default function EditorPanelLayout({
     editor,
     sidebarTop,
     sidebarBottom,
+    viewMode = 'normal',
+    settingsOpen = false,
+    onCloseSettings,
 }: EditorPanelLayoutProps) {
     const [draggingId, setDraggingId] = useState<string | null>(null);
 
@@ -142,6 +163,12 @@ export default function EditorPanelLayout({
     // there is visibly only one column, so the `⋮` menu becomes the sole
     // reorder affordance.
     const isNarrow = useNarrowViewport();
+
+    // Distraction-free moves the sidebar column into a slide-over drawer, so
+    // there is no second column to drag between — turn dragging off for the
+    // same reason narrow does, leaving the `⋮` menu as the reorder path.
+    const distractionFree = viewMode === 'distraction-free';
+    const dragOff = isNarrow || distractionFree;
 
     /** Visible, renderable panel ids in one column, top to bottom. */
     function renderableIds(column: EditorColumn): string[] {
@@ -259,7 +286,7 @@ export default function EditorPanelLayout({
                             isFirst={index === 0}
                             isLast={index === ids.length - 1}
                             collapsed={layout.isCollapsed(panelId)}
-                            dragEnabled={!isNarrow}
+                            dragEnabled={!dragOff}
                             focusRequest={layout.focusRequest}
                             onMove={layout.move}
                             onToggleCollapsed={layout.setCollapsed}
@@ -328,10 +355,10 @@ export default function EditorPanelLayout({
     return (
         <DndContext
             // Emptying the sensor list is what actually turns dragging off
-            // at narrow widths: with nothing listening, a press on a panel
-            // is never intercepted and the browser's own touch scrolling
-            // is left alone.
-            sensors={isNarrow ? NO_SENSORS : sensors}
+            // at narrow widths (and in distraction-free): with nothing
+            // listening, a press on a panel is never intercepted and the
+            // browser's own touch scrolling is left alone.
+            sensors={dragOff ? NO_SENSORS : sensors}
             collisionDetection={panelCollisionDetection}
             /*
              * Droppables are re-measured on every layout change rather than
@@ -354,28 +381,58 @@ export default function EditorPanelLayout({
              * moved everything into the main column still lands on content
              * rather than an empty region.
              */}
-            <a
-                href={`#${columnRegionId(skipTarget)}`}
-                // `sr-only` is itself `position: absolute`; `not-sr-only`
-                // returns the link to the flow on focus, so it opens a
-                // real gap above the editor instead of overlaying it.
-                className="sr-only rounded-lg border border-primary/40 bg-base-100 px-3 py-2 text-xs font-semibold text-primary focus:not-sr-only focus:inline-flex focus:w-fit focus:items-center"
-            >
-                Skip to editor panels
-            </a>
+            {/*
+             * Suppressed in distraction-free: the sidebar column lives in the
+             * `inert`, off-canvas settings drawer there, so the default layout
+             * (every panel in the sidebar) would point this link at a region
+             * that can't take focus. The floating control is the affordance in
+             * that mode instead.
+             */}
+            {!distractionFree && (
+                <a
+                    href={`#${columnRegionId(skipTarget)}`}
+                    // `sr-only` is itself `position: absolute`; `not-sr-only`
+                    // returns the link to the flow on focus, so it opens a
+                    // real gap above the editor instead of overlaying it.
+                    className="sr-only rounded-lg border border-primary/40 bg-base-100 px-3 py-2 text-xs font-semibold text-primary focus:not-sr-only focus:inline-flex focus:w-fit focus:items-center"
+                >
+                    Skip to editor panels
+                </a>
+            )}
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div
+                className={
+                    distractionFree
+                        ? 'grid grid-cols-1 gap-4'
+                        : 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]'
+                }
+            >
                 <div className="flex min-w-0 flex-col gap-4">
                     {editor}
                     {hoistSticky && stickyColumn !== null && renderStickyPublish(stickyColumn)}
                     {renderColumn('main')}
                 </div>
 
-                <aside className="flex flex-col gap-4">
-                    {sidebarTop}
-                    {renderColumn('sidebar')}
-                    {sidebarBottom}
-                </aside>
+                {/*
+                 * Distraction-free lifts the settings sidebar into a
+                 * slide-over so the writing column can fill the screen; every
+                 * other mode keeps it inline. The panels render once either
+                 * way — the sidebar column keeps its saved order and the ⋮
+                 * menu still reorders it inside the drawer.
+                 */}
+                {distractionFree ? (
+                    <SettingsDrawer open={settingsOpen} onClose={onCloseSettings}>
+                        {sidebarTop}
+                        {renderColumn('sidebar')}
+                        {sidebarBottom}
+                    </SettingsDrawer>
+                ) : (
+                    <aside className="flex flex-col gap-4">
+                        {sidebarTop}
+                        {renderColumn('sidebar')}
+                        {sidebarBottom}
+                    </aside>
+                )}
             </div>
 
             {/*
@@ -438,6 +495,151 @@ function PanelDropZone({
                     Drop here to move into the {EDITOR_COLUMN_LABELS[column]}
                 </p>
             )}
+        </div>
+    );
+}
+
+/** Focusable descendants of `root`, in tab order, skipping hidden ones. */
+function focusableWithin(root: HTMLElement): HTMLElement[] {
+    const selector =
+        'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    return Array.from(root.querySelectorAll<HTMLElement>(selector)).filter(
+        (element) =>
+            (element.offsetParent !== null || element === document.activeElement) &&
+            // A control inside an `inert` subtree (e.g. a collapsed
+            // `CollapsibleCard` body) is still laid out, so `offsetParent`
+            // passes it — but `focus()` on it is a no-op. Including it as the
+            // first/last trap target would silently let Tab escape the dialog.
+            element.closest('[inert]') === null,
+    );
+}
+
+/**
+ * The distraction-free settings slide-over (issue #239).
+ *
+ * Renders the settings sidebar as a right-hand drawer so the writing column
+ * can fill the screen while publishing / metadata stay one click away.
+ *
+ * The drawer stays **mounted** across open/close and is driven by the `open`
+ * prop — closed, it is `inert` (untabbable, hidden from AT) and slid off
+ * canvas. Keeping it mounted preserves each panel's in-progress local state
+ * (a half-typed new term, an open date picker) that unmounting would discard,
+ * and `inert` — the same mechanism `CollapsibleCard` uses for a closed body —
+ * keeps its controls out of the tab order without a `display:none` that would
+ * kill the slide.
+ *
+ * The slide honours `prefers-reduced-motion`: `motion-reduce:transition-none`
+ * makes the state change instant for those users while motion users get the
+ * slide. Focus moves to the close button on open and returns to the control
+ * that opened it on close; Tab is trapped inside the panel while open; Escape
+ * is handled one layer up (`useEditorViewMode`) so it closes the drawer
+ * before exiting the mode.
+ */
+function SettingsDrawer({
+    open,
+    onClose,
+    children,
+}: {
+    open: boolean;
+    onClose?: () => void;
+    children: ReactNode;
+}) {
+    const panelRef = useRef<HTMLDivElement>(null);
+    const closeRef = useRef<HTMLButtonElement>(null);
+    const restoreRef = useRef<HTMLElement | null>(null);
+
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+
+        restoreRef.current = document.activeElement as HTMLElement | null;
+        const raf = requestAnimationFrame(() => closeRef.current?.focus());
+
+        return () => {
+            cancelAnimationFrame(raf);
+            // Hand focus back to whatever opened the drawer (the floating
+            // Settings button) rather than leaving it on a now-inert control.
+            restoreRef.current?.focus?.();
+        };
+    }, [open]);
+
+    // Trap Tab within the panel while open — `aria-modal` promises the rest of
+    // the page is inert to AT, so keyboard focus must not wander out behind it.
+    function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+        if (event.key !== 'Tab' || !panelRef.current) {
+            return;
+        }
+        const focusable = focusableWithin(panelRef.current);
+        if (focusable.length === 0) {
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+
+        if (event.shiftKey && active === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && active === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    }
+
+    return (
+        <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`}>
+            {/*
+             * Backdrop, interactive only while open. A `<button>` so
+             * click-to-dismiss is a real control, but out of the tab order and
+             * hidden from AT — the dialog's own close button is the keyboard
+             * path.
+             */}
+            {open && (
+                <button
+                    type="button"
+                    aria-hidden
+                    tabIndex={-1}
+                    onClick={onClose}
+                    className="absolute inset-0 bg-base-content/20"
+                />
+            )}
+            <div
+                ref={panelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Editor settings"
+                // Closed: untabbable and hidden from AT, so the sidebar panels
+                // it holds aren't a second, invisible copy in the tab order.
+                inert={!open}
+                onKeyDown={handleKeyDown}
+                className={[
+                    'absolute inset-y-0 right-0 flex w-full max-w-sm transform flex-col gap-4 overflow-y-auto border-l border-base-300/60 bg-base-100 p-4 shadow-2xl',
+                    'transition-transform duration-200 motion-reduce:transition-none',
+                    open ? 'translate-x-0' : 'translate-x-full',
+                ].join(' ')}
+            >
+                <div className="flex items-center justify-between border-b border-base-300/60 pb-3">
+                    <h2 className="text-sm font-semibold text-base-content">Settings</h2>
+                    <button
+                        ref={closeRef}
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close settings"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-base-300/60 text-base-content/70 hover:bg-base-200 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden className="h-4 w-4">
+                            <path
+                                d="M6 6l12 12M18 6L6 18"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                            />
+                        </svg>
+                    </button>
+                </div>
+                {children}
+            </div>
         </div>
     );
 }

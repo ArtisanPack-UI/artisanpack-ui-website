@@ -1,0 +1,11 @@
+{
+    "name": "Blog",
+    "alias": "blog",
+    "description": "Keystone's blog surface around artisanpack-ui/cms-framework's Blog module: admin CRUD for posts, categories and tags, the public blog index and post rendering, browser-form comment submissions, and the scheduled-publish sweep.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Blog\\Providers\\BlogServiceProvider"
+    ],
+    "files": []
+}

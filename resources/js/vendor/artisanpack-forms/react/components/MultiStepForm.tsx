@@ -117,7 +117,7 @@ export function MultiStepForm( {
 							{allowStepNavigation ? (
 								<button
 									type="button"
-									className="cursor-pointer hover:opacity-80"
+									className="hover:opacity-80"
 									onClick={() => onGoToStep( i )}
 									aria-label={`Go to step ${i + 1}`}
 								>

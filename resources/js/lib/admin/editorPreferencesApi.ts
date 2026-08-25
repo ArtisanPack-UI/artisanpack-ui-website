@@ -16,7 +16,8 @@
  */
 
 import { apiFetch } from '@/lib/admin/apiFetch';
-import { destroy, update } from '@/routes/admin/editor-preferences';
+import type { EditorViewMode } from '@/lib/admin/editorChrome';
+import { destroy, update, viewMode } from '@/routes/admin/editor-preferences';
 
 const EDITOR_PREFERENCES_API_SOURCE = 'editorPreferencesApi';
 
@@ -48,6 +49,8 @@ export interface EditorPreferencesPayload {
     hidden_panels: string[];
     collapsed_panels: string[];
     panel_order: EditorPanelOrder;
+    /** Editor chrome view mode (issue #239). */
+    view_mode: EditorViewMode;
 }
 
 /** The layout state a write replaces wholesale. */
@@ -129,6 +132,22 @@ export function saveEditorLayout(
     signal?: AbortSignal,
 ): Promise<EditorPreferencesPayload> {
     return requestJson('PUT', update(postType).url, layout, signal);
+}
+
+/**
+ * Persist only the editor chrome view mode for a post type (issue #239).
+ *
+ * Its own endpoint rather than a key on {@link saveEditorLayout} so a mode
+ * switch never has to carry — or clobber — the panel layout, and so the
+ * content-type editor (which has no panel layout) can persist through the
+ * same store. The panel columns on the row are left untouched.
+ */
+export function saveEditorViewMode(
+    postType: string,
+    mode: EditorViewMode,
+    signal?: AbortSignal,
+): Promise<EditorPreferencesPayload> {
+    return requestJson('PUT', viewMode(postType).url, { view_mode: mode }, signal);
 }
 
 /** Clear the user's saved layout for a post type ("Reset layout"). */

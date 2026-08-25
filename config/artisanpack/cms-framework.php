@@ -10,12 +10,12 @@ return [
     | by the CMS framework to establish relationships and handle user logic.
     |
     | REQUIRED: You must publish this config and set this to your User model.
-    | Example: 'user_model' => \App\Models\User::class,
+    | Example: 'user_model' => \Modules\Users\Models\User::class,
     |
     | To publish: php artisan vendor:publish --tag=cms-framework-config
     |
     */
-    'user_model' => \App\Models\User::class,
+    'user_model' => \Modules\Users\Models\User::class,
 
     /*
     |--------------------------------------------------------------------------

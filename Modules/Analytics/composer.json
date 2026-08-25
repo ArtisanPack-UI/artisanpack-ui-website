@@ -1,0 +1,15 @@
+{
+    "name": "keystone/analytics",
+    "description": "Keystone Reports admin surface and the Keystone-facing facade over the artisanpack-ui/analytics package.",
+    "authors": [
+        {
+            "name": "Jacob Martella Web Design",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Modules\\Analytics\\": "app/"
+        }
+    }
+}

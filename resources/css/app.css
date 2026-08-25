@@ -124,6 +124,107 @@
     --color-brand-royal: #0855b1;
     --color-brand-navy: #010e54;
     --color-brand-abyss: #00022b;
+
+    /*
+     * Hover shades for filled brand buttons (issue #236). Each is a 10%
+     * darken of the corresponding brand token, following daisyUI's `.btn:hover`
+     * approach — `color-mix(in oklab, var(--btn-color), #000 7%)` — so
+     * hand-rolled buttons shade the same way the real `.btn` buttons do.
+     *
+     * The 10% is deliberate and does NOT match daisyUI's 7% exactly: these
+     * buttons are larger flat rectangles with no border or depth treatment, and
+     * 7% was not perceptible enough on them in either theme. If you want exact
+     * parity with the `.btn` buttons, change all three to 7% — do not change
+     * one, since the point of the tokens is that the three brands agree.
+     *
+     * These MUST stay `color-mix()` over `var(--color-*)` rather than baked
+     * hexes: `useAdminPalette` (`resources/js/lib/admin/shared.ts`) stamps the
+     * WCAG-clamped, user-configured palette from `App\Support\AdminTheme` onto
+     * `document.documentElement` at runtime. Because custom properties
+     * substitute at computed-value time, the mix re-resolves against whatever
+     * `--color-primary` currently is — a site with a custom brand colour gets a
+     * correctly darkened hover with no JS colour maths.
+     */
+    --color-primary-hover: color-mix(in oklab, var(--color-primary), #000 10%);
+    --color-secondary-hover: color-mix(in oklab, var(--color-secondary), #000 10%);
+    --color-accent-hover: color-mix(in oklab, var(--color-accent), #000 10%);
+}
+
+/*
+ * Admin button interaction states (issue #236).
+ *
+ * ── Part 1: cursor + focus ring, applied globally ────────────────────────
+ *
+ * The UA stylesheet gives `<button>` `cursor: default` and Tailwind v4's
+ * preflight does not override it (it touches `button` only for `appearance`
+ * and the Safari spin-button fix). daisyUI supplies `cursor: pointer` inside
+ * its `.btn` recipe, so only `.btn` buttons got one — every hand-rolled
+ * button in the admin fell through to the arrow cursor. Same story for the
+ * focus ring: it was written on a minority of buttons and absent everywhere
+ * else, leaving keyboard focus effectively invisible (WCAG 2.2 2.4.7).
+ *
+ * Fixing both here rather than per-button means the ~200 hand-rolled buttons
+ * and the `[role="button"]` elements are covered by construction, and a new
+ * button can never regress them. `@layer base` is emitted before
+ * `@layer utilities`, so a per-button `cursor-*` or `focus-visible:*` utility
+ * still wins where a component needs to opt out.
+ *
+ * daisyUI's `.btn` disabled recipe sets `pointer-events: none`, so `.btn`
+ * buttons never surface the disabled cursor either way — no conflict.
+ *
+ * ── Part 2: the hover ladder, applied per button ─────────────────────────
+ *
+ * Hover cannot be globalised — the right shift depends on the surface the
+ * button sits on. Four families cover the admin; pick the one that matches
+ * and add `transition-colors`, plus
+ * `disabled:cursor-not-allowed disabled:opacity-50` where it can be disabled:
+ *
+ *   ghost / icon / list-row   `hover:bg-base-200/60`
+ *   filled brand              `hover:bg-primary-hover` (or `-secondary-`/`-accent-`)
+ *   chrome (topbar + sidebar) `hover:bg-[var(--chrome-hover-bg)] hover:text-[var(--chrome-fg)]`
+ *   destructive               `hover:bg-error/10 hover:text-error`
+ *
+ * One exception to the four: a button that exists only to wrap a component
+ * painting its own background (the `<Badge>` chips in the media library) has no
+ * background of its own to shift, so it uses
+ * `transition-opacity hover:opacity-75` instead. Reach for this only when a
+ * background shift genuinely has nothing to act on.
+ *
+ * `tests/Feature/ButtonInteractionStatesTest.php` fails the build on any
+ * `<button>` that carries none of these.
+ */
+@layer base {
+    button:not(:disabled),
+    [role='button']:not([aria-disabled='true']) {
+        cursor: pointer;
+    }
+
+    button:disabled,
+    [role='button'][aria-disabled='true'] {
+        cursor: not-allowed;
+    }
+
+    button:focus-visible,
+    [role='button']:focus-visible {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 2px;
+    }
+
+    /*
+     * The sidebar and topbar are dark in BOTH themes (see `--chrome-bg`), so
+     * `--color-primary` — which is clamped for readability against
+     * `base-100` — lands as dark-on-dark there under `keystone-light` and the
+     * ring all but disappears. `--chrome-active-fg` is the token
+     * `AdminTheme::palette()` already clamps against the dark chrome surface
+     * for exactly this reason, so chrome buttons borrow it.
+     *
+     * `[data-admin-chrome]` is set on the `<aside>` and `<header>` in
+     * `resources/js/layouts/KeystoneAdminLayout.tsx`.
+     */
+    [data-admin-chrome] button:focus-visible,
+    [data-admin-chrome] [role='button']:focus-visible {
+        outline-color: var(--chrome-active-fg);
+    }
 }
 
 html,

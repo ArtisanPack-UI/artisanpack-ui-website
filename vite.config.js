@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import react from '@vitejs/plugin-react';
@@ -105,6 +106,20 @@ export default defineConfig(({ isSsrBuild }) => ({
         wayfinder(),
         ...(isSsrBuild ? [] : [keystoneFederationPlugin()]),
     ],
+    // `@modules/<Name>/...` resolves cross-module imports of module-public code
+    // without brittle `../../../Modules/...` relative chains. The alias points at
+    // the `Modules/` root (not at each module's `resources/js`) so it stays
+    // expressible as a single-wildcard `tsconfig.json` path mapping — TypeScript
+    // allows only one `*` per pattern, and Vite and TS disagreeing about a
+    // specifier is worse than the extra segment. Imports therefore read
+    // `@modules/Blog/resources/js/components/Foo`. Cross-module imports are meant
+    // to be rare: shared UI belongs in `resources/js` (see
+    // plans/14-modular-laravel-setup.md §3.4).
+    resolve: {
+        alias: {
+            '@modules': fileURLToPath(new URL('./Modules', import.meta.url)),
+        },
+    },
     // The federation plugin emits ESNext output; align the host build so
     // dynamic-remote entries (which use top-level await) can be consumed.
     build: {

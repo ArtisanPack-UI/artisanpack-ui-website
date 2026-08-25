@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
-use App\Http\Controllers\Admin\Settings\PerformanceController;
-use App\Http\Controllers\Admin\Settings\PrivacyController;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\HandleInertiaRequests;
-use App\Services\KeystoneAnalytics;
-use App\Support\KeystoneSampleData;
 use App\Support\NotificationItemPayload;
+use App\Support\SettingsPanels;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
@@ -20,6 +17,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Modules\Installer\Support\KeystoneSampleData;
 
 /**
  * Renders the Keystone admin shell pages with sample data.
@@ -78,6 +76,18 @@ class KeystoneShellController extends Controller
         ]);
     }
 
+    /**
+     * Render `/admin/settings` — one Inertia page whose payload hydrates every
+     * tab in a single response.
+     *
+     * Most tabs read `SettingsManager` inline. The env-driven panels (Privacy,
+     * Performance) belong to modules and are collected through the
+     * `keystone.admin.settings.panels` filter — see {@see SettingsPanels} for
+     * the payload contract, the ordering rule, and what happens when two
+     * subscribers claim one panel key. Core names no module class here, and a
+     * module whose provider never runs degrades to a missing tab rather than a
+     * 500 (#235).
+     */
     public function settings(SettingsManager $settings): Response
     {
         Gate::authorize('viewAny', Setting::class);
@@ -85,7 +95,7 @@ class KeystoneShellController extends Controller
         $logoId = $settings->getSetting('site.logo_id');
 
         return Inertia::render('admin/Settings', [
-            'settings' => [
+            'settings' => SettingsPanels::merge([
                 'general' => [
                     'siteName'        => $settings->getSetting('site.title'),
                     'siteUrl'         => $settings->getSetting('site.url'),
@@ -142,19 +152,11 @@ class KeystoneShellController extends Controller
                     'apiEnabled' => (bool) $settings->getSetting('api.enabled'),
                     'webhookUrl' => $settings->getSetting('api.webhookUrl'),
                 ],
-                // Privacy is env-driven (regulations, DPO contact,
-                // retention window) plus a Consent Category table; the
-                // dedicated PrivacyController owns the mutation
-                // endpoints, but the read-side payload lives with the
-                // rest of the Settings shell so a single Inertia
-                // response hydrates every tab.
-                'privacy' => PrivacyController::payload(),
-                // Performance mirrors the same pattern — env-driven
-                // feature toggles and tuning fields; the dedicated
-                // PerformanceController owns the mutation endpoint and
-                // exposes the read-side shape here.
-                'performance' => PerformanceController::payload(),
-            ],
+                // The env-driven module panels (`privacy`, `performance`) are
+                // appended by SettingsPanels::merge() from their own module
+                // providers. Each module's controller still owns its mutation
+                // endpoint; only the read-side hand-off is inverted.
+            ]),
             'options' => [
                 'timezones'   => $this->timezoneOptions(),
                 'locales'     => $this->localeOptions(),
@@ -169,25 +171,6 @@ class KeystoneShellController extends Controller
     {
         return Inertia::render('admin/Integrations', [
             'integrations' => KeystoneSampleData::integrations(),
-        ]);
-    }
-
-    /**
-     * Render the Reports page with live data from `artisanpack-ui/analytics`.
-     *
-     * The `revenue_series` prop stays sample-backed until the commerce
-     * wiring lands in issue #28 — revenue is not an analytics metric.
-     * KPIs, top pages, and traffic sources all flow through
-     * {@see KeystoneAnalytics}, which already returns empty/zero shapes
-     * when no data exists so the React page never has to special-case it.
-     */
-    public function reports(KeystoneAnalytics $analytics): Response
-    {
-        return Inertia::render('admin/Reports', [
-            'kpis'            => $analytics->reportKpis(),
-            'revenue_series'  => KeystoneSampleData::revenueSeries(),
-            'top_pages'       => $analytics->topPages(),
-            'traffic_sources' => $analytics->trafficSources(),
         ]);
     }
 

@@ -76,7 +76,7 @@ export default function CollapsibleCard({
                         onClick={toggle}
                         aria-expanded={open}
                         aria-controls={bodyId}
-                        className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 rounded-xl px-5 py-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset"
+                        className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-5 py-4 text-left outline-none transition-colors hover:bg-base-200/60 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset"
                     >
                         <span className="flex min-w-0 items-center gap-2">
                             <span

@@ -333,7 +333,7 @@ function PanelShell({
                     type="button"
                     onClick={onSave}
                     disabled={!dirty || saving}
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content shadow-sm hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     {saving && (
                         <span
@@ -1420,8 +1420,16 @@ function NotificationsPanel({ data }: { data: AdminSettings['notifications'] }) 
 /* Privacy                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The Privacy panel payload. `NonNullable` because the key is optional on
+ * `AdminSettings` — the Privacy module contributes it through the
+ * `keystone.admin.settings.panels` filter, so it is absent when the module
+ * isn't there — but the panel only renders once the payload is present.
+ */
+type PrivacyPanelData = NonNullable<AdminSettings['privacy']>;
+
 const PRIVACY_REGULATIONS: Array<{
-    key: keyof AdminSettings['privacy']['settings'];
+    key: keyof PrivacyPanelData['settings'];
     label: string;
     description: string;
 }> = [
@@ -1451,7 +1459,7 @@ const PRIVACY_REGULATIONS: Array<{
 // Inertia's router.post / .patch keep the payload compile-time checked
 // without an `as never` escape hatch. Every field here is a value
 // Inertia can serialize directly into FormData.
-type PrivacySettingsForm = AdminSettings['privacy']['settings'] & Record<string, FormDataConvertible>;
+type PrivacySettingsForm = PrivacyPanelData['settings'] & Record<string, FormDataConvertible>;
 type NewPrivacyCategoryForm = {
     key: string;
     name: string;
@@ -1468,7 +1476,7 @@ type UpdatePrivacyCategoryForm = {
     sort_order: number;
 } & Record<string, FormDataConvertible>;
 
-function PrivacyPanel({ data }: { data: AdminSettings['privacy'] }) {
+function PrivacyPanel({ data }: { data: PrivacyPanelData }) {
     const [baseline, setBaseline] = useState<PrivacySettingsForm>(data.settings);
     const [form, setForm] = useState<PrivacySettingsForm>(data.settings);
     const { saving, errors, run } = usePanelSave();
@@ -1555,7 +1563,7 @@ function PrivacyPanel({ data }: { data: AdminSettings['privacy'] }) {
     }
 
     function toggleCategory(
-        category: AdminSettings['privacy']['categories'][number],
+        category: PrivacyPanelData['categories'][number],
         field: 'active' | 'required',
     ) {
         const payload: UpdatePrivacyCategoryForm = {
@@ -1584,7 +1592,7 @@ function PrivacyPanel({ data }: { data: AdminSettings['privacy'] }) {
         );
     }
 
-    function deleteCategory(category: AdminSettings['privacy']['categories'][number]) {
+    function deleteCategory(category: PrivacyPanelData['categories'][number]) {
         if (category.required) {
             return;
         }
@@ -1839,7 +1847,7 @@ function PrivacyPanel({ data }: { data: AdminSettings['privacy'] }) {
                         <div className="lg:col-span-2">
                             <button
                                 type="submit"
-                                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content shadow-sm hover:bg-primary/90"
+                                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content shadow-sm hover:bg-primary-hover"
                             >
                                 Add category
                             </button>
@@ -1936,8 +1944,11 @@ function PrivacyPanel({ data }: { data: AdminSettings['privacy'] }) {
 /* Performance                                                                */
 /* -------------------------------------------------------------------------- */
 
+/** @see PrivacyPanelData — same filter-contributed contract. */
+type PerformancePanelData = NonNullable<AdminSettings['performance']>;
+
 const PERFORMANCE_FEATURE_TOGGLES: Array<{
-    key: keyof AdminSettings['performance']['settings'];
+    key: keyof PerformancePanelData['settings'];
     label: string;
     description: string;
 }> = [
@@ -1995,9 +2006,9 @@ const PERFORMANCE_FEATURE_TOGGLES: Array<{
     },
 ];
 
-type PerformanceSettingsForm = AdminSettings['performance']['settings'] & Record<string, FormDataConvertible>;
+type PerformanceSettingsForm = PerformancePanelData['settings'] & Record<string, FormDataConvertible>;
 
-function PerformancePanel({ data }: { data: AdminSettings['performance'] }) {
+function PerformancePanel({ data }: { data: PerformancePanelData }) {
     const [baseline, setBaseline] = useState<PerformanceSettingsForm>(data.settings);
     const [form, setForm] = useState<PerformanceSettingsForm>(data.settings);
     const { saving, errors, run } = usePanelSave();
@@ -2210,13 +2221,33 @@ function SettingsContent({ settings, options }: SettingsProps) {
     // but the tab still renders in the sidebar (which is what a
     // plugin surfacing a custom section via `.settings.sections`
     // typically wants).
+    // Drop the tabs whose panel payload is contributed by a module through
+    // the `keystone.admin.settings.panels` filter (see
+    // `App\Support\SettingsPanels`) when that module didn't contribute one —
+    // its provider never ran, or the module is gone. Missing tab, not a
+    // panel rendering against an undefined payload. Runs before the plugin
+    // filter below so a subscriber still gets the last word on the list.
+    const presentTabs = useMemo(
+        () => tabs.filter((t) => {
+            switch (t.key) {
+                case 'privacy':
+                    return undefined !== settings.privacy;
+                case 'performance':
+                    return undefined !== settings.performance;
+                default:
+                    return true;
+            }
+        }),
+        [settings],
+    );
+
     const filteredTabs = useMemo(
         () => applyFilters<SettingsTab[]>(
             'keystone.admin.settings.tabs',
-            tabs,
+            presentTabs,
             { surface: 'site', currentPath },
         ),
-        [currentPath],
+        [presentTabs, currentPath],
     );
 
     const initialTab: TabKey = filteredTabs[0]?.key ?? 'general';
@@ -2340,9 +2371,9 @@ function SettingsContent({ settings, options }: SettingsProps) {
                             builtIn = <NotificationsPanel data={settings.notifications} />;
                         } else if (tab === 'security') {
                             builtIn = <SecurityPanel data={settings.security} />;
-                        } else if (tab === 'privacy') {
+                        } else if (tab === 'privacy' && settings.privacy) {
                             builtIn = <PrivacyPanel data={settings.privacy} />;
-                        } else if (tab === 'performance') {
+                        } else if (tab === 'performance' && settings.performance) {
                             builtIn = <PerformancePanel data={settings.performance} />;
                         } else if (tab === 'developers') {
                             builtIn = <DevelopersPanel data={settings.developers} />;

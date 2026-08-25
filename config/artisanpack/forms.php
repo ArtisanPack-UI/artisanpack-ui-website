@@ -298,7 +298,7 @@ return [
         'allow_admin_bypass' => env( 'FORMS_ALLOW_ADMIN_BYPASS', true ),
 
         // The user model class for ownership relationships
-        'user_model' => env( 'FORMS_USER_MODEL', 'App\\Models\\User' ),
+        'user_model' => env( 'FORMS_USER_MODEL', 'Modules\\Users\\Models\\User' ),
     ],
 
     /*

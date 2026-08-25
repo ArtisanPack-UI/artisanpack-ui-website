@@ -1,0 +1,15 @@
+{
+    "name": "keystone/privacy",
+    "description": "Keystone admin surfaces, consent banner and scheduling for the artisanpack-ui/privacy package.",
+    "authors": [
+        {
+            "name": "Jacob Martella Web Design",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Modules\\Privacy\\": "app/"
+        }
+    }
+}

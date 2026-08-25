@@ -8,9 +8,21 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Support\Facades\File;
 
-use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\multiselect;
 
+/**
+ * Installs the optional ArtisanPack UI packages and scaffolds the ArtisanPack
+ * config, both of which a fresh checkout may or may not want.
+ *
+ * This command deliberately does **not** offer to set up a modular Laravel
+ * structure any more. It used to (install `nwidart/laravel-modules`, add the
+ * merge-plugin block to composer.json, `module:make Admin Auth Users`), but
+ * Keystone now ships the modular layout as its real structure — 16 modules
+ * under `Modules/`, the merge-plugin block already in composer.json, and
+ * `plans/14-modular-laravel-setup.md` §3 as the reference. Re-running that
+ * branch on this repo would reinstall a present dependency and scaffold empty
+ * modules over the real ones, so it was removed in #218 rather than guarded.
+ */
 class OptionalPackagesCommand extends Command
 {
     /**
@@ -51,16 +63,6 @@ class OptionalPackagesCommand extends Command
             $command = 'composer require '.implode(' ', $packages).' --with-all-dependencies';
             shell_exec($command);
             $this->info('Optional packages installed successfully.');
-        }
-
-        $useModularStructure = confirm(
-            __('Would you like to use a modular Laravel structure?'),
-            default: false,
-        );
-
-        if ($useModularStructure) {
-            $this->info('Setting up modular Laravel structure...');
-            $this->setupModularStructure();
         }
 
         $this->info('Scaffolding ArtisanPack configuration...');
@@ -108,84 +110,5 @@ class OptionalPackagesCommand extends Command
 
         File::put($composerJsonPath, json_encode($composerJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
         $this->info('Updated composer.json with project name and description.');
-    }
-
-    /**
-     * Set up the modular Laravel structure.
-     */
-    protected function setupModularStructure(): void
-    {
-        // Install Laravel Modules package. The mhmiton/laravel-modules-livewire
-        // adapter is intentionally not installed here — it's Livewire-specific
-        // and there's no Inertia equivalent.
-        $this->info('Installing nwidart/laravel-modules package...');
-        shell_exec('composer require nwidart/laravel-modules --with-all-dependencies');
-
-        // Publish configuration files
-        $this->info('Publishing module configuration files...');
-        shell_exec('php artisan vendor:publish --provider="Nwidart\Modules\LaravelModulesServiceProvider"');
-
-        // Update composer.json for module autoloading
-        $this->info('Updating composer.json for module autoloading...');
-        $this->updateComposerJson();
-
-        // Create default modules
-        $this->info('Creating default modules (Admin, Auth, Users)...');
-        $this->createDefaultModules();
-
-        // Run composer dump-autoload
-        $this->info('Running composer dump-autoload...');
-        shell_exec('composer dump-autoload');
-
-        $this->info('Modular structure setup complete!');
-    }
-
-    /**
-     * Update composer.json to include module autoloading.
-     */
-    protected function updateComposerJson(): void
-    {
-        $composerJsonPath = base_path('composer.json');
-
-        if (! File::exists($composerJsonPath)) {
-            $this->error('composer.json file not found.');
-
-            return;
-        }
-
-        try {
-            $composerJson = json_decode(File::get($composerJsonPath), true);
-        } catch (FileNotFoundException $e) {
-            $this->error('Failed to read composer.json: '.$e->getMessage());
-
-            return;
-        }
-
-        // Add merge-plugin configuration if it doesn't exist
-        if (! isset($composerJson['extra']['merge-plugin'])) {
-            $composerJson['extra']['merge-plugin'] = [
-                'include' => [
-                    'Modules/*/composer.json',
-                ],
-            ];
-
-            File::put($composerJsonPath, json_encode($composerJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
-            $this->info('Updated composer.json with module autoloading configuration.');
-        }
-    }
-
-    /**
-     * Create the default modules (Admin, Auth, Users).
-     */
-    protected function createDefaultModules(): void
-    {
-        $modules = ['Admin', 'Auth', 'Users'];
-
-        foreach ($modules as $module) {
-            $this->info("Creating $module module...");
-            shell_exec("php artisan module:make $module --no-interaction");
-        }
-
-        $this->info('Default modules created successfully.');
     }
 }

@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {{--
         SEO output is delegated to artisanpack-ui/seo. `<x-seo:meta>` walks
-        the Page/Post SeoMeta morph (wired by SeoIntegrationServiceProvider),
+        the Page/Post SeoMeta morph (wired by SeoServiceProvider),
         falls back to the model's title/excerpt, then to the SEO package's
         config — which in turn reads from Keystone's `seo.*` admin settings.
         The component emits <title>, meta description, robots, canonical,

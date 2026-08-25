@@ -175,6 +175,7 @@ export const TagManager: React.FC<TagManagerProps> = ( {
                 { /* All tags option */ }
                 <button
                     type="button"
+                    className="rounded-full transition-opacity hover:opacity-75"
                     onClick={ () => onTagSelect?.( null ) }
                 >
                     <Badge
@@ -187,6 +188,7 @@ export const TagManager: React.FC<TagManagerProps> = ( {
                     <div key={ tag.id } className="group relative inline-flex" tabIndex={ 0 }>
                         <button
                             type="button"
+                            className="rounded-full transition-opacity hover:opacity-75"
                             onClick={ () => onTagSelect?.( tag.slug ) }
                         >
                             <Badge
@@ -198,7 +200,7 @@ export const TagManager: React.FC<TagManagerProps> = ( {
                         <div className="absolute -top-1 -right-1 invisible flex gap-0.5 group-hover:visible group-focus-within:visible">
                             <button
                                 type="button"
-                                className="w-4 h-4 rounded-full bg-base-300 flex items-center justify-center"
+                                className="w-4 h-4 rounded-full bg-base-300 flex items-center justify-center transition-colors hover:bg-base-content/20"
                                 onClick={ () => handleEdit( tag ) }
                                 aria-label={ `Edit ${ tag.name }` }
                             >
@@ -208,7 +210,7 @@ export const TagManager: React.FC<TagManagerProps> = ( {
                             </button>
                             <button
                                 type="button"
-                                className="w-4 h-4 rounded-full bg-error text-error-content flex items-center justify-center"
+                                className="w-4 h-4 rounded-full bg-error text-error-content flex items-center justify-center transition-colors hover:bg-error/80"
                                 onClick={ () => setDeleting( tag ) }
                                 aria-label={ `Delete ${ tag.name }` }
                             >

@@ -19,6 +19,15 @@ use Throwable;
  * values the framework's manager will accept, so hoist them here to
  * keep the scheduling contract in one spot.
  *
+ * Stays central rather than moving into the Blog module with `PostController`
+ * (#211) or the Pages module with `PageController` (#212): the scheduling state
+ * machine is one contract that must not fork in two. Same call the Auth module
+ * made for `App\Http\Requests\Concerns\NormalizesUsername` (#207) — a concern
+ * shared by two modules belongs to neither.
+ * `Modules\Blog\Http\Controllers\PostController` and
+ * `Modules\Pages\Http\Controllers\PageController` therefore both import it
+ * across the boundary, and will keep doing so.
+ *
  * Between them, {@see publishedAtRules()} and {@see resolvePublication()}
  * make the backend the same state machine the Publish panel runs
  * client-side:

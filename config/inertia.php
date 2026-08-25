@@ -1,5 +1,29 @@
 <?php
 
+declare(strict_types=1);
+
+/*
+ * Every root that can own an Inertia page: the core `resources/js/pages`
+ * plus one per extracted module (plans/14-modular-laravel-setup.md §3.4).
+ * The frontend flattens the same two roots into a single page-key map in
+ * `resources/js/lib/resolve-page.ts`; this list is the server-side mirror
+ * of it, and it is what makes `assertInertia()->component('admin/...')`
+ * resolve for a page that has moved into a module. Without the module
+ * entries every module page assertion fails with "page component file
+ * does not exist" even though the page renders correctly in the browser.
+ *
+ * Under Inertia v3 this feeds `pages.paths` (the old top-level `page_paths`
+ * and `testing.page_paths` keys were removed); the `inertia.view-finder`
+ * binding and `AssertableInertia::component()` both resolve against it.
+ *
+ * Globbed rather than listed so a new module needs no edit here. Config is
+ * cached on deployed sites, so the glob runs once at cache time.
+ */
+$pagePaths = array_merge(
+    [resource_path('js/pages')],
+    glob(base_path('Modules/*/resources/js/pages'), GLOB_ONLYDIR) ?: [],
+);
+
 return [
 
     /*
@@ -23,11 +47,33 @@ return [
 
         'enabled' => (bool) env('INERTIA_SSR_ENABLED', true),
 
+        'runtime' => env('INERTIA_SSR_RUNTIME', 'node'),
+
+        'ensure_runtime_exists' => (bool) env('INERTIA_SSR_ENSURE_RUNTIME_EXISTS', false),
+
         'url' => env('INERTIA_SSR_URL', 'http://127.0.0.1:13714'),
+
+        'hot_url' => env('INERTIA_SSR_HOT_URL'),
 
         'ensure_bundle_exists' => (bool) env('INERTIA_SSR_ENSURE_BUNDLE_EXISTS', true),
 
         // 'bundle' => base_path('bootstrap/ssr/ssr.mjs'),
+
+        /*
+        |--------------------------------------------------------------------------
+        | SSR Error Handling
+        |--------------------------------------------------------------------------
+        |
+        | When SSR rendering fails, Inertia gracefully falls back to client-side
+        | rendering. Set throw_on_error to true to throw an exception instead.
+        | This is useful for E2E testing where you want SSR errors to fail loudly.
+        |
+        | You can also listen for the Inertia\Ssr\SsrRenderFailed event to handle
+        | failures in your own way (e.g., logging, error tracking service).
+        |
+        */
+
+        'throw_on_error' => (bool) env('INERTIA_SSR_THROW_ON_ERROR', false),
 
     ],
 
@@ -40,59 +86,19 @@ return [
     | components exist on disk when rendering a page. This is useful for
     | catching missing or misnamed components.
     |
-    | The `page_paths` and `page_extensions` options define where to look
-    | for page components and which file extensions to consider.
+    | The `paths` and `extensions` options define where to look for page
+    | components and which file extensions to consider. `paths` is the shared
+    | core + per-module glob defined above.
     |
     */
 
-    'ensure_pages_exist' => false,
+    'pages' => [
 
-    'page_paths' => [
+        'ensure_pages_exist' => false,
 
-        resource_path('js/pages'),
+        'paths' => $pagePaths,
 
-    ],
-
-    'page_extensions' => [
-
-        'js',
-        'jsx',
-        'svelte',
-        'ts',
-        'tsx',
-        'vue',
-
-    ],
-
-    'use_script_element_for_initial_page' => (bool) env('INERTIA_USE_SCRIPT_ELEMENT_FOR_INITIAL_PAGE', false),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Testing
-    |--------------------------------------------------------------------------
-    |
-    | The values described here are used to locate Inertia components on the
-    | filesystem. For instance, when using `assertInertia`, the assertion
-    | attempts to locate the component as a file relative to any of the
-    | paths AND with any of the extensions specified here.
-    |
-    | Note: In a future release, the `page_paths` and `page_extensions`
-    | options below will be removed. The root-level options above
-    | will be used for both application and testing purposes.
-    |
-    */
-
-    'testing' => [
-
-        'ensure_pages_exist' => true,
-
-        'page_paths' => [
-
-            resource_path('js/pages'),
-
-        ],
-
-        'page_extensions' => [
+        'extensions' => [
 
             'js',
             'jsx',
@@ -105,9 +111,115 @@ return [
 
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Testing
+    |--------------------------------------------------------------------------
+    |
+    | When using `assertInertia`, the assertion attempts to locate the
+    | component as a file relative to the `pages.paths` AND with any of
+    | the `pages.extensions` specified above.
+    |
+    | You can disable this behavior by setting `ensure_pages_exist`
+    | to false.
+    |
+    */
+
+    'testing' => [
+
+        'ensure_pages_exist' => true,
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Expose Shared Prop Keys
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, each page response includes a `sharedProps` metadata key
+    | listing the top-level prop keys that were registered via `Inertia::share`.
+    | The frontend can use this to carry shared props over during instant visits.
+    |
+    */
+
+    'expose_shared_prop_keys' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | History
+    |--------------------------------------------------------------------------
+    |
+    | Enable `encrypt` to encrypt page data before it is stored in the
+    | browser's history state, preventing sensitive information from
+    | being accessible after logout. Can also be enabled per-request
+    | or via the `inertia.encrypt` middleware.
+    |
+    */
+
     'history' => [
 
         'encrypt' => (bool) env('INERTIA_ENCRYPT_HISTORY', false),
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | DevTools
+    |--------------------------------------------------------------------------
+    |
+    | Records one entry per request to disk so the DevTools Chrome extension may
+    | read it back over HTTP. Recording is limited to your local environment.
+    | See https://inertiajs.com/docs/devtools for the gate and storage options.
+    |
+    */
+
+    'devtools' => [
+
+        'enabled' => env('INERTIA_DEVTOOLS_ENABLED'),
+
+        'except' => ['telescope*', 'horizon*', '_inertia/devtools*'],
+
+        'storage' => [
+
+            'path' => storage_path('inertia-devtools'),
+
+            'ttl' => (int) env('INERTIA_DEVTOOLS_TTL_HOURS', 24),
+
+            'prune_interval' => (int) env('INERTIA_DEVTOOLS_PRUNE_INTERVAL_SECONDS', 300),
+
+            'limit' => (int) env('INERTIA_DEVTOOLS_LIMIT', 100),
+
+        ],
+
+        'middleware' => ['web'],
+
+        'gate' => env('INERTIA_DEVTOOLS_GATE'),
+
+        'redact' => [
+
+            'keys' => [
+                'password',
+                'password_confirmation',
+                'current_password',
+                'token',
+                '_token',
+                'access_token',
+                'refresh_token',
+                'secret',
+                'client_secret',
+                'api_key',
+            ],
+
+            'headers' => [
+                'cookie',
+                'set-cookie',
+                'authorization',
+                'proxy-authorization',
+                'x-xsrf-token',
+                'x-csrf-token',
+            ],
+
+        ],
 
     ],
 

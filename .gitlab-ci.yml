@@ -123,7 +123,7 @@ php_test:
     - php artisan test --testsuite=Unit,Feature --compact
   rules: *test_rules
 
-# Pest 4 Browser smoke tests (#35). Runs the admin shell against a real
+# Pest 5 Browser smoke tests (#35). Runs the admin shell against a real
 # Chromium via Playwright. Split from `php_test` so its extra system-deps +
 # binary download don't slow the unit/feature gate, and so a browser-flake
 # never blocks a fix landing for the functional tests.
@@ -148,13 +148,53 @@ browser_test:
     - composer install --no-interaction --prefer-dist --no-progress
     - npm ci --no-audit --no-fund
     - npm run build:ssr
+    # Make apt re-fetch an index it couldn't verify. `archive.ubuntu.com`
+    # is a CDN in front of mirrors that sync independently, so a request
+    # landing mid-sync gets a Packages.gz whose size disagrees with the
+    # Release file that was fetched moments earlier ("File has unexpected
+    # size (4523740 != 4523738). Mirror sync in progress?"). apt treats
+    # that as fatal by default and exits 100. One retry normally lands
+    # after the sync completes or on a node that already has it.
+    - echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-keystone-retries > /dev/null
     # `--with-deps` shells out to apt-get for the chromium system libs
     # (libnss3, libatk1.0, libxkbcommon, fonts, etc.). The cimg base image
     # ships passwordless sudo for the `circleci` user, which playwright's
     # installer uses transparently.
-    - npx playwright install --with-deps chromium
+    #
+    # Wrapped in its own retry because the apt config above only covers the
+    # download; if the mirror stays inconsistent for longer than apt's
+    # retry window, `apt-get update` still exits non-zero and playwright
+    # aborts the whole install. That failure lands in before_script, so the
+    # job dies having run zero tests and the trace looks nothing like a
+    # test failure — it cost a full pipeline round-trip on !133. Retrying
+    # here is safe in a way retrying the job would not be: it re-runs only
+    # the environmental step, never the assertions.
+    - |
+      install_browsers() {
+        for attempt in 1 2 3; do
+          npx playwright install --with-deps chromium && return 0
+          if [ "$attempt" != 3 ]; then
+            echo "playwright install failed (attempt ${attempt}/3) — retrying in 15s" >&2
+            sleep 15
+          fi
+        done
+        echo "playwright install failed after 3 attempts — treating as a real failure" >&2
+        return 1
+      }
+      install_browsers
   script:
     - php artisan test --testsuite=Browser --compact
+  # Pest writes a screenshot next to every failed browser assertion. Without
+  # this they die with the runner, so a CI-only failure can only be guessed
+  # at from the message — which is how the pipeline burned two round-trips
+  # on !118. `when: on_failure` keeps green pipelines from carrying the
+  # weight.
+  artifacts:
+    when: on_failure
+    name: "browser-screenshots-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - tests/Browser/Screenshots/
+    expire_in: 2 weeks
   rules: *test_rules
 
 build_release:
@@ -183,6 +223,12 @@ build_release:
     # artifact. `.gitattributes` `export-ignore` covers `git archive`
     # (source downloads, Composer dist) but not this zip, so a
     # developer-only file needs an entry in both places.
+    #
+    # The env excludes enumerate the real (gitignored) `.env` variants
+    # rather than a `.env.*` glob, because `.env.example` MUST ship — a
+    # fresh install's first step is `cp .env.example .env`. Add any new
+    # secret-bearing `.env.*` file here explicitly; never re-broaden to
+    # `.env.*` (that re-strands the template — see #114).
     - sudo apt-get update -qq && sudo apt-get install -y zip
     - |
       zip -r -q "keystone-${VERSION}.zip" . \
@@ -193,7 +239,7 @@ build_release:
            '.github/*' '*/.github/*' \
            '.claude/*' '*/.claude/*' \
            'plans/*' '*/plans/*' \
-           '.env' '.env.*' \
+           '.env' '.env.local' '.env.*.local' '.env.backup' '.env.production' \
            'database/database.sqlite' \
            'storage/logs/*' \
            'storage/framework/cache/data/*' \
@@ -205,6 +251,17 @@ build_release:
            'solo.yml' \
            '*/.DS_Store' '.DS_Store' \
            "keystone-${VERSION}.zip" "keystone-${VERSION}.zip.sha256"
+    # The `storage/**/*` excludes above match each dir's `.gitkeep` too, so the
+    # empty runtime directories vanish from the extracted zip and the first
+    # `php artisan` call dies with "Please provide a valid cache path" before
+    # `keystone:install` can run. Re-add the `.gitkeep` sentinels so the
+    # directory structure survives extraction. See #115.
+    - |
+      zip -q "keystone-${VERSION}.zip" \
+        storage/logs/.gitkeep \
+        storage/framework/cache/data/.gitkeep \
+        storage/framework/sessions/.gitkeep \
+        storage/framework/views/.gitkeep
     - sha256sum "keystone-${VERSION}.zip" | awk '{print $1}' > "keystone-${VERSION}.zip.sha256"
     - echo "BUILD_JOB_ID=$CI_JOB_ID" >> build.env
     - echo "VERSION=$VERSION" >> build.env

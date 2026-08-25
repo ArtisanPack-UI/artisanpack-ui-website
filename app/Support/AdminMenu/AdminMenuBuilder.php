@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Support\AdminMenu;
 
-use App\Models\User;
-use App\Support\ContentModel\SpecializedContentTypes;
-use App\Support\Permissions\PermissionSlugResolver;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Routing\UrlGenerator;
 use Illuminate\Support\Str;
+use Modules\ContentModel\Support\SpecializedContentTypes;
+use Modules\Users\Models\User;
+use Modules\Users\Support\Permissions\PermissionSlugResolver;
 use Throwable;
 
 /**

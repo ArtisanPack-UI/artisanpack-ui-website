@@ -1,6 +1,6 @@
 /**
  * Compute the WordPress-style display-name candidates from a user's identity
- * fields. Mirrors {@see App\Models\User::displayNameCandidates} so the
+ * fields. Mirrors {@see Modules\Users\Models\User::displayNameCandidates} so the
  * admin Edit and Profile Settings dropdowns can update live as the operator
  * edits the name fields, without an extra round trip to the server.
  *

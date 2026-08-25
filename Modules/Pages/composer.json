@@ -1,0 +1,15 @@
+{
+    "name": "keystone/pages",
+    "description": "Keystone's pages surface around artisanpack-ui/cms-framework's Pages module: the admin CRUD at /admin/pages and the public renderer that resolves a page and hands it to the active theme.",
+    "authors": [
+        {
+            "name": "Jacob Martella Web Design",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Modules\\Pages\\": "app/"
+        }
+    }
+}

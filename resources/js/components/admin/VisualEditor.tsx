@@ -24,6 +24,15 @@ interface VisualEditorProps {
     initialStatus?: string;
     previewUrl?: string | null;
     supports?: DocumentSupports;
+    /**
+     * Fired once the editor's boot attempt has settled — whether it
+     * mounted successfully, gave up, or failed outright. Consumers gate
+     * the primary Save on this so a click that lands during the mount
+     * window is never silently dropped (issue #237). It deliberately
+     * fires on failure too: a bundle that never boots must not leave the
+     * form's only Save button permanently inert.
+     */
+    onReady?: () => void;
 }
 
 const SCRIPT_SRC = '/visual-editor/visual-editor.js';
@@ -259,8 +268,17 @@ export default function VisualEditor({
     initialStatus,
     previewUrl,
     supports,
+    onReady,
 }: VisualEditorProps) {
     const ref = useRef<HTMLDivElement | null>(null);
+    // Held in a ref so a fresh `onReady` closure on every parent render
+    // doesn't retrigger the boot effect (its deps stay `[resource, id]`).
+    // The boot effect only reads it asynchronously, long after this sync
+    // effect has published the latest closure.
+    const onReadyRef = useRef(onReady);
+    useEffect(() => {
+        onReadyRef.current = onReady;
+    });
 
     useEffect(() => {
         // Route the bundle URL through `.visualEditor.scriptSrc` so a
@@ -292,6 +310,13 @@ export default function VisualEditor({
             .catch((err) => {
                 if (controller.signal.aborted) return;
                 console.error('Visual editor failed to load:', err);
+            })
+            .finally(() => {
+                // The boot attempt is over (mounted, gave up, or errored).
+                // Skip only when this mount was torn down mid-boot — the
+                // parent is gone and there is no Save to unlock.
+                if (controller.signal.aborted) return;
+                onReadyRef.current?.();
             });
         return () => controller.abort();
     }, [resource, id]);

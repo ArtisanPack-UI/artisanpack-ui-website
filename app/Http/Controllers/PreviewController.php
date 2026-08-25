@@ -7,6 +7,8 @@ namespace App\Http\Controllers;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use Illuminate\Http\Request;
+use Modules\Blog\Http\Controllers\BlogController;
+use Modules\Pages\Http\Controllers\PublicPageController;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 

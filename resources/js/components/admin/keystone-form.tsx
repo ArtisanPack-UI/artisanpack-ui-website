@@ -103,7 +103,7 @@ export function PrimaryButton({
         <button
             type={type}
             disabled={disabled || loading}
-            className={`inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
+            className={`inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
             {...rest}
         >
             {loading && (

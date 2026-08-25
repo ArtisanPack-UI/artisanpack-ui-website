@@ -109,7 +109,7 @@ function mountPreferencesTriggers() {
 
 /**
  * Hydrate the three visual-editor DSR blocks emitted by
- * `App\VisualEditor\Blocks\{ConsentHistory,DsrRequest,DsrStatus}Block`.
+ * `Modules\Privacy\VisualEditor\Blocks\{ConsentHistory,DsrRequest,DsrStatus}Block`.
  * Each block's server-rendered `<div data-privacy-block="…">` is
  * replaced by the corresponding package React component. Guards against
  * double-mounting so an in-editor preview refresh stays idempotent.

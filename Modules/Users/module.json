@@ -1,0 +1,11 @@
+{
+    "name": "Users",
+    "alias": "users",
+    "description": "Keystone's user, role and permission administration plus personal account settings: the User model, its factories and role/permission seeders.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Users\\Providers\\UsersServiceProvider"
+    ],
+    "files": []
+}

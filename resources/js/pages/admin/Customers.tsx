@@ -16,7 +16,7 @@ export default function Customers({ customers }: { customers: CustomerRow[] }) {
                     breadcrumbs={['Online Store', 'Customers']}
                     description="Customer profiles, order history, and lifetime value."
                     actions={
-                        <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90">
+                        <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary-hover">
                             {Icon.plus}
                             Add customer
                         </button>

@@ -41,7 +41,7 @@ export default function Products({ products }: { products: ProductRow[] }) {
                                 {Icon.upload}
                                 Import
                             </button>
-                            <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90">
+                            <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary-hover">
                                 {Icon.plus}
                                 Add product
                             </button>

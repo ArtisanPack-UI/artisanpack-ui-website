@@ -4,12 +4,20 @@
          bootstrap="vendor/autoload.php"
          colors="true"
 >
+    <!--
+        Module test directories are globbed so a new `Modules/X` needs no
+        phpunit.xml edit. The globs resolve to nothing until the first module
+        lands, which PHPUnit tolerates. Browser tests stay central: they
+        exercise cross-module flows.
+    -->
     <testsuites>
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
+            <directory>Modules/*/tests/Unit</directory>
         </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
+            <directory>Modules/*/tests/Feature</directory>
         </testsuite>
         <testsuite name="Browser">
             <directory>tests/Browser</directory>
@@ -18,6 +26,7 @@
     <source>
         <include>
             <directory>app</directory>
+            <directory>Modules/*/app</directory>
         </include>
     </source>
     <php>

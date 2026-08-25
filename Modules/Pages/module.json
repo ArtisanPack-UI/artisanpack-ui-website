@@ -1,0 +1,11 @@
+{
+    "name": "Pages",
+    "alias": "pages",
+    "description": "Keystone's pages surface around artisanpack-ui/cms-framework's Pages module: the admin CRUD at /admin/pages and the public renderer that resolves a page and hands it to the active theme.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Pages\\Providers\\PagesServiceProvider"
+    ],
+    "files": []
+}

@@ -4,13 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
-use App\Models\User;
 use App\Support\AdminMenu\AdminMenuBuilder;
 use App\Support\AdminTheme;
-use App\Support\KeystoneSampleData;
 use App\Support\NotificationItemPayload;
-use App\Support\Permissions\PermissionSlugResolver;
-use App\Support\Plugins\FederatedModuleManifest;
 use App\Support\SiteBranding;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
@@ -18,6 +14,10 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
+use Modules\Installer\Support\KeystoneSampleData;
+use Modules\Plugins\Support\FederatedModuleManifest;
+use Modules\Users\Models\User;
+use Modules\Users\Support\Permissions\PermissionSlugResolver;
 
 class HandleInertiaRequests extends Middleware
 {

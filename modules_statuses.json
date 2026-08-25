@@ -1,0 +1,18 @@
+{
+    "Performance": true,
+    "Privacy": true,
+    "Analytics": true,
+    "Seo": true,
+    "Updater": true,
+    "Auth": true,
+    "Users": true,
+    "Media": true,
+    "Forms": true,
+    "Blog": true,
+    "Pages": true,
+    "ContentModel": true,
+    "Themes": true,
+    "SiteEditor": true,
+    "Plugins": true,
+    "Installer": true
+}

@@ -1,0 +1,15 @@
+{
+    "name": "keystone/performance",
+    "description": "Keystone admin surfaces and scheduling for the artisanpack-ui/performance package.",
+    "authors": [
+        {
+            "name": "Jacob Martella Web Design",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Modules\\Performance\\": "app/"
+        }
+    }
+}

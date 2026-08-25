@@ -1,0 +1,11 @@
+{
+    "name": "Performance",
+    "alias": "performance",
+    "description": "Keystone admin surfaces and scheduling for the artisanpack-ui/performance package.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Performance\\Providers\\PerformanceServiceProvider"
+    ],
+    "files": []
+}

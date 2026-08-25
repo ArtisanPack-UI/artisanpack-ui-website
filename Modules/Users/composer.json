@@ -1,0 +1,17 @@
+{
+    "name": "keystone/users",
+    "description": "Keystone's user, role and permission administration plus personal account settings: the User model, its factories and role/permission seeders.",
+    "authors": [
+        {
+            "name": "Jacob Martella Web Design",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Modules\\Users\\": "app/",
+            "Modules\\Users\\Database\\Factories\\": "database/factories/",
+            "Modules\\Users\\Database\\Seeders\\": "database/seeders/"
+        }
+    }
+}

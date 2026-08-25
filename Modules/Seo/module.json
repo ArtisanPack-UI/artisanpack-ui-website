@@ -1,0 +1,11 @@
+{
+    "name": "Seo",
+    "alias": "seo",
+    "description": "Keystone's bridge into artisanpack-ui/seo: settings-driven meta and robots configuration, the SEO meta editor support layer, and the redirects admin surface.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Seo\\Providers\\SeoServiceProvider"
+    ],
+    "files": []
+}

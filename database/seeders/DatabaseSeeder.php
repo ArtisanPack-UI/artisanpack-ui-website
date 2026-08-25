@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use ArtisanPackUI\Database\Seeders\PermissionsTableSeeder;
 use ArtisanPackUI\Database\Seeders\RolesTableSeeder;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Modules\Users\Database\Seeders\KeystonePermissionsSeeder;
+use Modules\Users\Database\Seeders\KeystoneRolesSeeder;
+use Modules\Users\Models\User;
 
 class DatabaseSeeder extends Seeder
 {

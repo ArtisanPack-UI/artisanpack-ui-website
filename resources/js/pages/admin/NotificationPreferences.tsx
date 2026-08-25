@@ -223,7 +223,7 @@ function NotificationPreferencesContent({ preferences }: NotificationPreferences
                                     type="button"
                                     onClick={handleSave}
                                     disabled={!dirty || saving || resetting}
-                                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content shadow-sm hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {saving && (
                                         <span

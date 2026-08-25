@@ -1,12 +1,29 @@
 import { createInertiaApp } from '@inertiajs/react';
 import createServer from '@inertiajs/react/server';
 import ReactDOMServer from 'react-dom/server';
-import type { ReactNode } from 'react';
+import type { ComponentType } from 'react';
 import { ThemeProvider } from '@artisanpack-ui/react';
 
 import type { FederatedModuleManifest } from '@/lib/plugins/federated-loader';
+import { buildPageMap, pageNotFoundError } from '@/lib/resolve-page';
 
 const fallbackAppName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+// Mirrors `app.tsx` exactly — same two glob roots, same shared key derivation
+// and duplicate guard. Hoisted to module scope so the eager glob is flattened
+// once at bundle load rather than on every rendered page. Divergence between
+// the two entries is the classic way an SSR render 500s on a page the client
+// resolves fine, which is why both go through `buildPageMap`
+// (plans/14-modular-laravel-setup.md §3.4).
+const pages = buildPageMap(
+    import.meta.glob<{ default: ComponentType<Record<string, unknown>> }>('./pages/**/*.tsx', {
+        eager: true,
+    }),
+    import.meta.glob<{ default: ComponentType<Record<string, unknown>> }>(
+        '../../Modules/*/resources/js/pages/**/*.tsx',
+        { eager: true },
+    ),
+);
 
 /**
  * A no-op placeholder for federated plugin pages during server-side render.
@@ -34,10 +51,7 @@ createServer((page) => {
         render: ReactDOMServer.renderToString,
         title: (title) => (title ? `${title} - ${appName}` : appName),
         resolve: (name) => {
-            const pages = import.meta.glob<{ default: ReactNode }>('./pages/**/*.tsx', {
-                eager: true,
-            });
-            const found = pages[`./pages/${name}.tsx`];
+            const found = pages[name];
             if (found) {
                 return found;
             }
@@ -46,7 +60,7 @@ createServer((page) => {
                 return { default: FederatedSsrPlaceholder };
             }
 
-            throw new Error(`Inertia page not found: ./pages/${name}.tsx`);
+            throw pageNotFoundError(name);
         },
         setup: ({ App, props }) => (
             <ThemeProvider defaultColorScheme="system">

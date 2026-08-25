@@ -1,0 +1,11 @@
+{
+    "name": "Privacy",
+    "alias": "privacy",
+    "description": "Keystone admin surfaces, consent banner and scheduling for the artisanpack-ui/privacy package.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Privacy\\Providers\\PrivacyServiceProvider"
+    ],
+    "files": []
+}

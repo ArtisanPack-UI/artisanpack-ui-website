@@ -25,6 +25,7 @@ import {
     markNotificationAsRead,
 } from '@/lib/admin/notificationsApi';
 import { acquireAdminMarker, releaseAdminMarker } from '@/lib/admin/progress';
+import { useAdminChromeMode } from '@/lib/admin/editorChrome';
 import type {
     AdminMenu,
     AdminMenuChild,
@@ -163,6 +164,7 @@ function Sidebar({
                 />
             )}
             <aside
+                data-admin-chrome
                 className={`fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-[var(--chrome-border)] bg-[var(--chrome-bg)] text-[var(--chrome-fg)] transition-[width,transform] duration-200 lg:sticky lg:top-0 lg:translate-x-0 ${
                     mobileOpen ? 'translate-x-0' : '-translate-x-full'
                 } ${collapsed ? 'w-[72px]' : 'w-[256px]'}`}
@@ -622,6 +624,12 @@ interface TopbarProps {
     notifications: NotificationItem[];
     onSearchClick: () => void;
     onSidebarOpen: () => void;
+    /**
+     * Whether the mobile "Open menu" toggle should render. False when the
+     * sidebar is unmounted (full-width mode), where the toggle would open
+     * nothing — see the call site (#239).
+     */
+    showSidebarToggle: boolean;
     onMarkAllNotificationsRead: () => void;
     onMarkOneNotificationRead: (id: number) => void;
 }
@@ -631,6 +639,7 @@ function Topbar({
     notifications,
     onSearchClick,
     onSidebarOpen,
+    showSidebarToggle,
     onMarkAllNotificationsRead,
     onMarkOneNotificationRead,
 }: TopbarProps) {
@@ -641,15 +650,20 @@ function Topbar({
     const unreadCount = notifications.filter((n) => !n.read).length;
 
     return (
-        <header className="sticky top-0 z-30 flex h-[60px] items-center gap-3 border-b border-[var(--chrome-border)] bg-[var(--chrome-bg)] px-4 lg:px-6">
-            <button
-                type="button"
-                onClick={onSidebarOpen}
-                aria-label="Open menu"
-                className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--chrome-input-border)] bg-[var(--chrome-input-bg)] text-[var(--chrome-fg-muted)] hover:bg-[var(--chrome-hover-bg)] lg:hidden"
-            >
-                {Icon.panelLeft}
-            </button>
+        <header
+            data-admin-chrome
+            className="sticky top-0 z-30 flex h-[60px] items-center gap-3 border-b border-[var(--chrome-border)] bg-[var(--chrome-bg)] px-4 lg:px-6"
+        >
+            {showSidebarToggle && (
+                <button
+                    type="button"
+                    onClick={onSidebarOpen}
+                    aria-label="Open menu"
+                    className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--chrome-input-border)] bg-[var(--chrome-input-bg)] text-[var(--chrome-fg-muted)] hover:bg-[var(--chrome-hover-bg)] lg:hidden"
+                >
+                    {Icon.panelLeft}
+                </button>
+            )}
             <div className="flex flex-1 items-center gap-2">
                 {applyFilters<ReactNode>('keystone.admin.topbar.left', null)}
                 <SearchTrigger onClick={onSearchClick} />
@@ -935,6 +949,17 @@ export default function KeystoneAdminLayout({ children }: { children: ReactNode 
         }
     }, []);
 
+    // Editor chrome view mode (issue #239), driven by whichever edit screen
+    // is mounted via the `editorChrome` store. `full-width` and
+    // `distraction-free` both hide the left admin sidebar so the editor
+    // column can expand; only `distraction-free` also hides the topbar. The
+    // panels are unmounted rather than `display:none`'d — the edit screen
+    // moves focus deliberately across the transition (see `useEditorViewMode`)
+    // so nothing is stranded on a hidden control.
+    const chromeMode = useAdminChromeMode();
+    const hideSidebar = chromeMode !== 'normal';
+    const hideTopbar = chromeMode === 'distraction-free';
+
     // `keystone.admin.layout.wrap` runs on every render so plugin callbacks
     // registered after mount pick up on the next React commit. Callbacks
     // receive the built-in layout tree and can wrap it (floating widget,
@@ -942,26 +967,41 @@ export default function KeystoneAdminLayout({ children }: { children: ReactNode 
     return applyFilters<ReactNode>(
         'keystone.admin.layout.wrap',
         <div className="flex min-h-screen bg-base-200/50 font-sans text-base-content">
-            <Sidebar
-                collapsed={collapsed}
-                onToggleCollapsed={() => setCollapsed((v) => !v)}
-                currentPath={currentPath}
-                mobileOpen={mobileOpen}
-                onMobileClose={() => setMobileOpen(false)}
-                navGroups={navGroups}
-                brand={keystone.brand}
-                version={keystone.version}
-            />
-            <div className="flex min-w-0 flex-1 flex-col">
-                <Topbar
-                    me={me}
-                    notifications={displayedNotifications}
-                    onSearchClick={() => setPaletteOpen(true)}
-                    onSidebarOpen={() => setMobileOpen(true)}
-                    onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
-                    onMarkOneNotificationRead={handleMarkOneNotificationRead}
+            {!hideSidebar && (
+                <Sidebar
+                    collapsed={collapsed}
+                    onToggleCollapsed={() => setCollapsed((v) => !v)}
+                    currentPath={currentPath}
+                    mobileOpen={mobileOpen}
+                    onMobileClose={() => setMobileOpen(false)}
+                    navGroups={navGroups}
+                    brand={keystone.brand}
+                    version={keystone.version}
                 />
-                <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+            )}
+            <div className="flex min-w-0 flex-1 flex-col">
+                {!hideTopbar && (
+                    <Topbar
+                        me={me}
+                        notifications={displayedNotifications}
+                        onSearchClick={() => setPaletteOpen(true)}
+                        onSidebarOpen={() => setMobileOpen(true)}
+                        // No sidebar mounted → the mobile toggle would open
+                        // nothing, so hide it in full-width (#239).
+                        showSidebarToggle={!hideSidebar}
+                        onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+                        onMarkOneNotificationRead={handleMarkOneNotificationRead}
+                    />
+                )}
+                <main
+                    className={
+                        hideTopbar
+                            ? 'flex-1 px-4 py-4 lg:px-6 lg:py-6'
+                            : 'flex-1 px-4 py-6 lg:px-8 lg:py-8'
+                    }
+                >
+                    {children}
+                </main>
             </div>
             <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={paletteItems} />
         </div>,

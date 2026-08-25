@@ -1,0 +1,11 @@
+{
+    "name": "ContentModel",
+    "alias": "contentmodel",
+    "description": "Keystone's content-model surface around artisanpack-ui/cms-framework's ContentTypes module: the /admin/content-model screens for content types, taxonomies and custom fields, and the generic record CRUD for every registered content type.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\ContentModel\\Providers\\ContentModelServiceProvider"
+    ],
+    "files": []
+}

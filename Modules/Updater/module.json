@@ -1,0 +1,11 @@
+{
+    "name": "Updater",
+    "alias": "updater",
+    "description": "Keystone self-update admin surface and the Keystone-facing wiring over the cms-framework Updates module.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Updater\\Providers\\UpdaterServiceProvider"
+    ],
+    "files": []
+}

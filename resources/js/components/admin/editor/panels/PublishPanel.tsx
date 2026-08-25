@@ -36,6 +36,14 @@ interface PublishPanelProps {
     /** When present, enables the Preview button and opens this URL in a new tab. */
     previewUrl?: string | null;
 
+    /**
+     * Whether the editor is ready to accept a save. Defaults to `true`;
+     * the edit screens pass `false` while the visual editor is still
+     * mounting so the Save controls carry a pending state instead of
+     * silently dropping a click (issue #237).
+     */
+    canSubmit?: boolean;
+
     statusError?: string;
     publishedAtError?: string;
 
@@ -72,6 +80,7 @@ export default function PublishPanel({
     siteTimezone,
     isDirty,
     previewUrl,
+    canSubmit = true,
     statusError,
     publishedAtError,
     onStatusChange,
@@ -236,7 +245,8 @@ export default function PublishPanel({
                         <button
                             type="button"
                             onClick={onSaveDraft}
-                            className="inline-flex items-center rounded-md text-xs font-semibold text-base-content/70 underline-offset-2 max-lg:min-h-11 hover:text-base-content hover:underline focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+                            disabled={!canSubmit}
+                            className="inline-flex items-center rounded-md text-xs font-semibold text-base-content/70 underline-offset-2 max-lg:min-h-11 hover:text-base-content hover:underline focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
                         >
                             Save Draft
                         </button>
@@ -458,10 +468,30 @@ export default function PublishPanel({
                         >
                             Move to Trash
                         </button>
+                        {/*
+                         * Native `disabled` — not the `aria-disabled` +
+                         * no-op click the Preview button uses — while the
+                         * editor is still mounting (issue #237). The pending
+                         * state here is transient and self-describing (the
+                         * spinner), so it needs none of the "why is this
+                         * off" affordance a persistent disable would; and
+                         * only a real `disabled` also suppresses implicit
+                         * form submission, so pressing Enter in the title
+                         * during the mount window can't drop a save either.
+                         * `aria-busy` names the wait for assistive tech.
+                         */}
                         <button
                             type="submit"
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-content shadow-sm max-lg:min-h-11 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:outline-none"
+                            disabled={!canSubmit}
+                            aria-busy={canSubmit ? undefined : true}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-content shadow-sm max-lg:min-h-11 hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                         >
+                            {!canSubmit && (
+                                <span
+                                    aria-hidden
+                                    className="h-3 w-3 animate-spin rounded-full border-2 border-primary-content/60 border-t-transparent"
+                                />
+                            )}
                             {primaryLabel}
                         </button>
                     </div>
@@ -525,6 +555,11 @@ function actualStatusText(value: ActualStatus, statuses: StatusOption[]): string
  * 3.5–4.2:1 against the card in light mode — under the 4.5:1 WCAG 1.4.3
  * floor at this 10px size — while `base-content` clears it comfortably in
  * both themes and leaves the hue as the redundant cue it should be.
+ *
+ * The hue per status matches the `statusTone` maps on the post and page
+ * indexes (#233) so a record does not change colour between the list and
+ * its editor: `scheduled` is informational (it will publish itself),
+ * `private` warns (it is live but withheld from the public).
  */
 function actualStatusPillClass(value: ActualStatus): string {
     const base =
@@ -533,9 +568,9 @@ function actualStatusPillClass(value: ActualStatus): string {
         case 'published':
             return `${base} bg-success/20 ring-success/50`;
         case 'scheduled':
-            return `${base} bg-warning/20 ring-warning/50`;
-        case 'private':
             return `${base} bg-info/20 ring-info/50`;
+        case 'private':
+            return `${base} bg-warning/20 ring-warning/50`;
         default:
             return `${base} bg-base-300/60 ring-base-300`;
     }

@@ -1,0 +1,15 @@
+{
+    "name": "keystone/themes",
+    "description": "Keystone's themes surface around artisanpack-ui/cms-framework's Themes module: the site-design admin (theme upload, activation, Business Info), the static-asset server for themes living outside public/, and the template locator the public renderers resolve through.",
+    "authors": [
+        {
+            "name": "Jacob Martella Web Design",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Modules\\Themes\\": "app/"
+        }
+    }
+}

@@ -11,15 +11,15 @@ use Illuminate\Contracts\Database\Query\Builder as BuilderContract;
  * The single definition of "this record is live on the public site."
  *
  * Scheduled content is flipped to Published by
- * {@see \App\Console\Commands\PublishScheduledContent}, but cron granularity
- * is a floor, not a guarantee — a stalled worker, a machine that was asleep,
- * or simply the seconds between the minute ticking over and the sweep
- * finishing all leave a window where a record is due but its `status` column
- * still says `scheduled`. Rather than let the public site 404 through that
- * window, both scopes below treat a scheduled row whose date has passed as
+ * {@see \Modules\Blog\Console\Commands\PublishScheduledContent}, but cron
+ * granularity is a floor, not a guarantee — a stalled worker, a machine that
+ * was asleep, or simply the seconds between the minute ticking over and the
+ * sweep finishing all leave a window where a record is due but its `status`
+ * column still says `scheduled`. Rather than let the public site 404 through
+ * that window, both scopes below treat a scheduled row whose date has passed as
  * live. That's the same predicate the admin's status pill already uses
- * (`PostController::actualStatus()`), so the two surfaces can no longer
- * disagree.
+ * (`Modules\Blog\Http\Controllers\PostController::actualStatus()`), so the two
+ * surfaces can no longer disagree.
  *
  * Posts and pages deliberately differ on the date gate:
  *

@@ -16,10 +16,18 @@
         "types": ["node", "vite/client"],
         "baseUrl": ".",
         "paths": {
-            "@/*": ["resources/js/*"]
+            "@/*": ["resources/js/*"],
+            "@modules/*": ["Modules/*"]
         }
     },
-    "include": ["resources/js/**/*.ts", "resources/js/**/*.tsx", "resources/js/**/*.d.ts"],
+    "include": [
+        "resources/js/**/*.ts",
+        "resources/js/**/*.tsx",
+        "resources/js/**/*.d.ts",
+        "Modules/*/resources/js/**/*.ts",
+        "Modules/*/resources/js/**/*.tsx",
+        "Modules/*/resources/js/**/*.d.ts"
+    ],
     "exclude": [
         "resources/js/vendor/**",
         "node_modules/@artisanpack-ui/performance/**",

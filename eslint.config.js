@@ -7,7 +7,9 @@ export default tseslint.config(
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
-        files: ['resources/js/**/*.{ts,tsx}'],
+        // Module-colocated Inertia pages/components get the same rules as core
+        // JS — they are first-party build-time code, not vendored output.
+        files: ['resources/js/**/*.{ts,tsx}', 'Modules/*/resources/js/**/*.{ts,tsx}'],
         plugins: {
             react: reactPlugin,
             'react-hooks': reactHooksPlugin,

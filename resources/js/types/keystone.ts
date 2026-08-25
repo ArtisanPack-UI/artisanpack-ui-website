@@ -43,11 +43,19 @@ export interface LeadRow {
     status: 'new' | 'contacted' | 'qualified';
 }
 
+/**
+ * Mirrors the framework's `ContentStatus` enum. Both index screens key a
+ * tone map and a tab set off this union, so a case missing here doesn't
+ * fail the build — it renders an undefined tone on a row no tab can filter
+ * to (#233). Keep it in step with the enum.
+ */
+export type ContentRowStatus = 'published' | 'draft' | 'scheduled' | 'private';
+
 export interface PageRow {
     id: number;
     title: string;
     slug: string;
-    status: 'published' | 'draft' | 'scheduled';
+    status: ContentRowStatus;
     updated_at: string;
     author: string;
     views: number;
@@ -58,7 +66,7 @@ export interface PostRow {
     title: string;
     slug: string;
     permalink: string;
-    status: 'published' | 'draft' | 'scheduled';
+    status: ContentRowStatus;
     category: string;
     published_at: string | null;
     author: string;
@@ -395,7 +403,14 @@ export interface AdminSettings {
         apiEnabled: boolean;
         webhookUrl: string;
     };
-    privacy: {
+    /**
+     * Module-owned panels. Optional because they are contributed by their
+     * module's service provider through the `keystone.admin.settings.panels`
+     * filter rather than written by core — a module whose provider never runs
+     * (or that is removed outright) simply omits its key, and the Settings
+     * page drops the matching tab instead of erroring.
+     */
+    privacy?: {
         settings: {
             gdpr_enabled: boolean;
             ccpa_enabled: boolean;
@@ -424,7 +439,8 @@ export interface AdminSettings {
             total_dsr_requests: number;
         };
     };
-    performance: {
+    /** @see the note on `privacy` — same filter-contributed contract. */
+    performance?: {
         settings: {
             image_optimization: boolean;
             page_cache: boolean;

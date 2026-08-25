@@ -7,7 +7,7 @@ import FeaturedImagePicker, {
 
 /**
  * Shape of the SEO sub-form rendered inside the admin Page / Post edit
- * screens. Mirrors `App\Support\Seo\SeoMetaSupport::payload()` so the
+ * screens. Mirrors `Modules\Seo\Support\SeoMetaSupport::payload()` so the
  * server hydrates the form without a separate fetch.
  */
 export interface SeoMetaForm {

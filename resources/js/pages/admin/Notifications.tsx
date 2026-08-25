@@ -223,11 +223,11 @@ export default function Notifications({ notifications: initialNotifications }: N
                                 </div>
                                 <ul>
                                     {items.map((n) => (
-                                        <li key={n.id} className="flex items-stretch border-b border-base-300/40 last:border-b-0 hover:bg-base-200/40">
+                                        <li key={n.id} className="flex items-stretch border-b border-base-300/40 last:border-b-0">
                                             <button
                                                 type="button"
                                                 onClick={() => handleMarkOneRead(n.id)}
-                                                className="flex flex-1 items-start gap-4 px-5 py-4 text-left"
+                                                className="flex flex-1 items-start gap-4 px-5 py-4 text-left transition-colors hover:bg-base-200/60"
                                             >
                                                 <span
                                                     className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${

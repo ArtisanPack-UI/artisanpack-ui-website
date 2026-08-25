@@ -1,0 +1,11 @@
+{
+    "name": "Media",
+    "alias": "media",
+    "description": "Keystone's media library admin shell around artisanpack-ui/media-library: the Inertia mount point, the upload-validation subclass that widens the vendor MIME map, and the shared image-media validation rule.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Media\\Providers\\MediaServiceProvider"
+    ],
+    "files": []
+}

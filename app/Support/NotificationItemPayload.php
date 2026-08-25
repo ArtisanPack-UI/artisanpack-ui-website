@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-use App\Models\User;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Managers\NotificationManager;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
+use Modules\Users\Models\User;
 
 /**
  * Builds the `NotificationItem` array shape the admin shell's React side

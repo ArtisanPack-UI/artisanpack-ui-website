@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Enums\NotificationType;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Managers\NotificationManager;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\NotificationPreference;
@@ -13,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Modules\Users\Models\User;
 
 /**
  * Per-user notification preferences. Each authenticated user manages their

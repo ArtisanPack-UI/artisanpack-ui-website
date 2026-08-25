@@ -1,0 +1,21 @@
+{
+    "name": "keystone/site-editor",
+    "description": "Keystone's site-editor surface: the customizable per-user admin dashboards and their widgets, the /admin/site-editor entry point into the visual-editor SPA, and the CORS-enabled asset route that SPA's iframe canvas needs.",
+    "authors": [
+        {
+            "name": "Jacob Martella Web Design",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Modules\\SiteEditor\\": "app/",
+            "Modules\\SiteEditor\\Database\\Factories\\": "database/factories/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\SiteEditor\\Tests\\": "tests/"
+        }
+    }
+}

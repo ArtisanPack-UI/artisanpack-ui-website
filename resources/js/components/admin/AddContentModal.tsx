@@ -411,7 +411,7 @@ export function AddContentModal({
                         <button
                             type="submit"
                             disabled={saving}
-                            className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-content hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+                            className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-content hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
                         >
                             {saving ? 'Creating…' : `Create ${label}`}
                         </button>

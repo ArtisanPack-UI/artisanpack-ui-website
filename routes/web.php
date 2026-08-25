@@ -2,26 +2,25 @@
 
 declare(strict_types=1);
 
-use App\Http\Controllers\BlogController;
-use App\Http\Controllers\CommentSubmissionController;
-use App\Http\Controllers\InstallController;
 use App\Http\Controllers\PreviewController;
-use App\Http\Controllers\PublicFormController;
-use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\SitePasswordController;
-use App\Http\Controllers\ThemeAssetController;
-use App\Http\Controllers\VisualEditorAssetController;
 use Illuminate\Support\Facades\Route;
+use Modules\Pages\Http\Controllers\PublicPageController;
 
-// One-time install wizard. Gated by `installed:guard` — pre-install requests
-// need a valid `?token=` (+ optional IP allowlist) and the absence of the
-// `.installed` flag; once installed, every request 404s so the surface
-// stops existing entirely. See `plans/06-keystone-plan.md` §5.3.
-Route::middleware('installed:guard')->group(function (): void {
-    Route::get('install', [InstallController::class, 'show'])->name('install.show');
-    Route::post('install', [InstallController::class, 'store'])->name('install.store');
-});
+// The `install.show`/`install.store` routes live in the Installer module
+// (`Modules/Installer/routes/web.php`), which reapplies `installed:guard`
+// inside its own route file. Their `install($|/)` alternative in the
+// catch-all constraint below stays here — that constraint is what keeps the
+// module routes reachable at all (see the note on the catch-all).
 
+// `PublicPageController` lives in the Pages module
+// (`Modules/Pages/app/Http/Controllers/`), but `home` and the `/{path}` catch-all
+// below both stay here. The catch-all's negative-lookahead constraint is what
+// keeps every *other* module's public routes reachable — module routes register
+// after this file (plans/14-modular-laravel-setup.md §3.3) — so moving it into
+// Pages would put a shared constraint inside one module and register it after
+// the routes it has to yield to. `home` stays with it: same controller, same
+// resolution path, and splitting the pair across two files buys nothing.
 Route::get('/', [PublicPageController::class, 'home'])
     ->middleware('site.access')
     ->name('home');
@@ -43,39 +42,29 @@ Route::redirect('settings/password', '/admin/profile/password');
 Route::redirect('settings/appearance', '/admin/profile/appearance');
 Route::redirect('settings/two-factor', '/admin/profile/two-factor');
 
-Route::middleware(['feature:blog', 'site.access'])->group(function (): void {
-    Route::get('blog', [BlogController::class, 'index'])->name('blog.index');
-    Route::get('blog/{slug}', [BlogController::class, 'show'])->name('blog.show');
+// The `blog.index`, `blog.show` and `comments.store` routes live in the Blog
+// module (`Modules/Blog/routes/web.php`), which reapplies `feature:blog` and
+// `site.access` inside its own route file. Their `blog($|/)` alternative in the
+// catch-all constraint below stays here — that constraint is what keeps the two
+// GET routes reachable at all (see the note on the catch-all). `comments` is
+// POST-only and so is deliberately absent from it.
 
-    // Comment submissions from the visual-editor's
-    // `artisanpack/post-comments-form` block. Throttled via the
-    // cms-framework `comments` rate limiter so guests can't spam.
-    Route::post('comments', [CommentSubmissionController::class, 'store'])
-        ->middleware('throttle:comments')
-        ->name('comments.store');
-});
+// The `visual-editor.asset` route lives in the SiteEditor module
+// (`Modules/SiteEditor/routes/web.php`). Its `visual-editor($|/)`
+// alternative in the catch-all constraint below stays here — that
+// constraint is what keeps the module route reachable at all (see the note
+// on the catch-all).
 
-// Visual-editor prebuilt SPA assets (CORS-enabled for the Gutenberg
-// iframe canvas). Path constraint deliberately excludes `site` and
-// `site/...` so the package's catch-all SPA route at
-// `/visual-editor/site/{path?}` still wins for those URLs.
-Route::get('/visual-editor/{path}', VisualEditorAssetController::class)
-    ->where('path', '^(?!site($|/)).+$')
-    ->name('visual-editor.asset');
+// The `themes.asset` route lives in the Themes module
+// (`Modules/Themes/routes/web.php`). It stays reachable despite registering
+// after the catch-all below because `themes($|/)` is already one of that
+// route's excluded prefixes — see the module's RouteServiceProvider.
 
-// Theme static assets (stylesheet, images, fonts). Themes live outside
-// `public/` so the controller validates the slug + path and serves a
-// strict allowlist of extensions. See ThemeAssetController.
-Route::get('/themes/{theme}/{path}', ThemeAssetController::class)
-    ->where('path', '.+')
-    ->name('themes.asset');
-
-// Public form rendering. Dedicated route so themes can deep-link a form
-// (e.g. "Open the contact form in its own page") without needing the
-// visual editor to embed it inline.
-Route::middleware(['feature:forms', 'site.access'])
-    ->get('forms/{form}', [PublicFormController::class, 'show'])
-    ->name('public.forms.show');
+// The `public.forms.show` route lives in the Forms module
+// (`Modules/Forms/routes/web.php`), which reapplies `feature:forms` and
+// `site.access` inside its own route file. Its `forms($|/)` alternative in
+// the catch-all constraint below stays here — that constraint is what keeps
+// the module route reachable at all (see the note on the catch-all).
 
 // Signed-URL preview endpoint. `signed` middleware verifies the HMAC
 // + expiration timestamp before the controller runs, so an invalid or
@@ -91,14 +80,43 @@ Route::get('/preview/{type}/{id}', PreviewController::class)
     ->name('preview.show');
 
 require __DIR__.'/admin.php';
-require __DIR__.'/auth.php';
 
 // Public CMS page catch-all. Must come LAST so it doesn't shadow
 // admin/auth/blog/visual-editor routes. The path constraint blocks
 // any prefix used by those route groups before it reaches the
 // PublicPageController. New top-level admin segments must be added to
 // this list to stay out of the page-resolution path.
+//
+// "Last" is only true within this file. Module route files are mapped by
+// each module's own RouteServiceProvider and land AFTER everything here
+// (measured: this route at index 620, `register` at 622, `login` at 624),
+// so for a module route the constraint is not a belt-and-braces guard —
+// it is the only thing keeping this route off the URI, and `{path}`'s
+// `.+` pattern matches slashes too
+// (plans/14-modular-laravel-setup.md §3.3). Every module extracted
+// before Auth (#207) owned `admin/`-prefixed routes only and so was covered
+// by the `admin($|/)` alternative already present. The Auth module's routes
+// are top-level, which is why its eight GET URIs are listed individually
+// below; they were previously protected by ordering alone, since
+// `routes/auth.php` was `require`d immediately above this route.
+//
+// Each auth entry reserves exactly what the module serves, no more. Six of
+// them are exact URIs and so are `$`-anchored (as `favicon\.ico$` and
+// `robots\.txt$` already are here); only `reset-password/{token}` and
+// `verify-email/{id}/{hash}` own a sub-tree and take `($|/)`. Widening the
+// six to `($|/)` would newly 404 a CMS page at `/register/team` — behaviour
+// this extraction has no business changing. The corollary: ADDING a GET
+// sub-route under one of the six (`login/sso`, say) means widening its
+// alternative here in the same change, or the catch-all eats it.
+//
+// The POST-only auth URIs (`logout`, `email/verification-notification`) are
+// not listed at all, for the same reason: this route only answers GET, so
+// they cannot be shadowed, and reserving `logout` or `email` would newly
+// forbid a CMS page at either slug.
+//
+// `AuthRoutesTest` pins all three groups — reserved, not-reserved, and the
+// sub-tree boundary.
 Route::get('/{path}', [PublicPageController::class, 'show'])
-    ->where('path', '^(?!admin($|/)|api($|/)|auth($|/)|blog($|/)|forms($|/)|install($|/)|preview($|/)|settings($|/)|site-password($|/)|themes($|/)|visual-editor($|/)|build($|/)|storage($|/)|assets($|/)|favicon\\.ico$|robots\\.txt$|sitemap[\\-a-z0-9]*\\.xml$).+$')
+    ->where('path', '^(?!admin($|/)|api($|/)|auth($|/)|blog($|/)|confirm-password$|forgot-password$|forms($|/)|install($|/)|login$|logout-link$|preview($|/)|register$|reset-password($|/)|settings($|/)|site-password($|/)|themes($|/)|two-factor-challenge$|verify-email($|/)|visual-editor($|/)|build($|/)|storage($|/)|assets($|/)|favicon\\.ico$|robots\\.txt$|sitemap[\\-a-z0-9]*\\.xml$).+$')
     ->middleware('site.access')
     ->name('public.show');

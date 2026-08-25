@@ -1,0 +1,11 @@
+{
+    "name": "Analytics",
+    "alias": "analytics",
+    "description": "Keystone Reports admin surface and the Keystone-facing facade over the artisanpack-ui/analytics package.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Analytics\\Providers\\AnalyticsServiceProvider"
+    ],
+    "files": []
+}

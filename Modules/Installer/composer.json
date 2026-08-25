@@ -1,0 +1,15 @@
+{
+    "name": "keystone/installer",
+    "description": "Keystone's provisioning surfaces: the keystone:install CLI command, the /install web wizard and the InstallationService both drop into, the Installed middleware that gates the wizard, and the admin-shell sample data.",
+    "authors": [
+        {
+            "name": "Jacob Martella Web Design",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Modules\\Installer\\": "app/"
+        }
+    }
+}

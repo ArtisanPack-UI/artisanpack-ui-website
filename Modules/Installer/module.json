@@ -1,0 +1,11 @@
+{
+    "name": "Installer",
+    "alias": "installer",
+    "description": "Keystone's provisioning surfaces: the keystone:install CLI command, the /install web wizard and the InstallationService both drop into, the Installed middleware that gates the wizard, and the admin-shell sample data.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Installer\\Providers\\InstallerServiceProvider"
+    ],
+    "files": []
+}

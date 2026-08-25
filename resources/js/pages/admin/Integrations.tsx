@@ -122,7 +122,7 @@ export default function Integrations({ integrations }: { integrations: Integrati
                                         </div>
                                     </div>
                                     <div className="mt-4 flex items-center justify-end border-t border-base-300/60 pt-3">
-                                        <button type="button" className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-content hover:bg-primary/90">
+                                        <button type="button" className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-content hover:bg-primary-hover">
                                             Connect
                                         </button>
                                     </div>

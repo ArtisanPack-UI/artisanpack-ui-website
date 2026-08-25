@@ -8,7 +8,7 @@
  */
 return [
     'cms-framework' => [
-        'user_model' => \App\Models\User::class,
+        'user_model' => \Modules\Users\Models\User::class,
     ],
     'accessibility' => [
         'wcag_thresholds' => [

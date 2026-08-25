@@ -1,0 +1,11 @@
+{
+    "name": "SiteEditor",
+    "alias": "siteeditor",
+    "description": "Keystone's site-editor surface: the customizable per-user admin dashboards and their widgets, the /admin/site-editor entry point into the visual-editor SPA, and the CORS-enabled asset route that SPA's iframe canvas needs.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\SiteEditor\\Providers\\SiteEditorServiceProvider"
+    ],
+    "files": []
+}

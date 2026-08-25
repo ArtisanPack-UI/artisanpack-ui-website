@@ -3,7 +3,7 @@
  * `resources/js/app.tsx` so every widget component is in the registry by
  * the time the Dashboard page mounts.
  *
- * Keep this list in sync with `App\Providers\DashboardWidgetServiceProvider`
+ * Keep this list in sync with `Modules\SiteEditor\Providers\DashboardWidgetServiceProvider`
  * — the keys here match each widget's server-side `extendedInfo()['component']`,
  * not the dashboard `type`.
  */

@@ -1,0 +1,11 @@
+{
+    "name": "Forms",
+    "alias": "forms",
+    "description": "Keystone's forms surface around artisanpack-ui/forms: the admin builder and submissions inbox, the public single-form page, and the id-vs-slug route binding that keeps admin URLs stable across renames.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Forms\\Providers\\FormsServiceProvider"
+    ],
+    "files": []
+}

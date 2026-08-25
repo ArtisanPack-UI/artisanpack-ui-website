@@ -259,6 +259,7 @@ export const MediaEdit: React.FC<MediaEditProps> = ( {
                                 <button
                                     key={ tag.id }
                                     type="button"
+                                    className="rounded-full transition-opacity hover:opacity-75"
                                     onClick={ () => toggleTag( tag.id ) }
                                 >
                                     <Badge

@@ -1,0 +1,15 @@
+{
+    "name": "keystone/plugins",
+    "description": "Keystone's admin surface around artisanpack-ui/cms-framework's Plugins module: the /admin/system/plugins install/activate/update screen, the SSRF guard on plugin update-manifest fetches, the PluginManager subclass that emits per-plugin boot hooks, and the federated-module manifest for plugin-supplied Inertia pages.",
+    "authors": [
+        {
+            "name": "Jacob Martella Web Design",
+            "email": "me@jacobmartella.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Modules\\Plugins\\": "app/"
+        }
+    }
+}

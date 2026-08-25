@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        <title data-inertia>{{ config('app.name', 'Laravel') }}</title>
 
         @if (! empty($siteIcon))
             <link rel="icon" type="{{ $siteIcon['type'] }}" sizes="{{ $siteIcon['sizes'] }}" href="{{ $siteIcon['href'] }}">
@@ -17,7 +17,13 @@
         @endif
 
         @viteReactRefresh
-        @vite(['resources/css/app.css', 'resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
+        {{-- The per-page entry is a Vite manifest key, i.e. the page's
+             source path — which is only under `resources/js/pages` for
+             core pages. Module pages live at
+             `Modules/<Name>/resources/js/pages/...`, so the path is
+             resolved against every registered page root rather than
+             assumed (see App\Support\InertiaPageEntry). --}}
+        @vite(['resources/css/app.css', 'resources/js/app.tsx', \App\Support\InertiaPageEntry::resolve($page['component'])])
         @inertiaHead
 
         {{-- Plugin injection zone: everything else the admin shell needs

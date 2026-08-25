@@ -26,6 +26,7 @@ import '@/lib/admin/hooks';
 
 import KeystoneAdminLayout from '@/layouts/KeystoneAdminLayout';
 import { PluginErrorBoundary } from '@/components/plugins/PluginErrorBoundary';
+import { buildPageMap, pageNotFoundError } from '@/lib/resolve-page';
 import {
     loadFederatedPage,
     preloadFederatedBootModules,
@@ -136,7 +137,15 @@ router.on('navigate', (event) => {
 
 // Local pages are Vite build-time glob output — hoist to module scope so
 // the record is computed once rather than re-referenced per navigation.
-const localPages = import.meta.glob<{ default: ReactNode }>('./pages/**/*.tsx');
+// Both globs must be literal for Vite to statically analyse them; the key
+// derivation and the duplicate guard live in `buildPageMap` so `ssr.tsx`
+// cannot drift from this file (see plans/14-modular-laravel-setup.md §3.4).
+const localPages = buildPageMap(
+    import.meta.glob<{ default: ComponentType<Record<string, unknown>> }>('./pages/**/*.tsx'),
+    import.meta.glob<{ default: ComponentType<Record<string, unknown>> }>(
+        '../../Modules/*/resources/js/pages/**/*.tsx',
+    ),
+);
 
 /**
  * Memoized wrapper cache: `name::entryUrl` → the boundary-and-layout
@@ -270,17 +279,24 @@ async function bootAdminShell(): Promise<void> {
     const app = await createInertiaApp({
         title: (title) => (title ? `${title} - ${appName}` : appName),
         resolve: (name) => {
-            const local = localPages[`./pages/${name}.tsx`];
+            // This resolver is async, so it must resolve to the page component
+            // itself (`Promise<ReactComponent>`). Inertia v3's `ComponentResolver`
+            // type accepts a *synchronous* module record (`{ default: ReactComponent }`)
+            // and the runtime unwraps `.default` for you — that is why `ssr.tsx`,
+            // which returns synchronously, needs no unwrap. But the type does NOT
+            // accept a `Promise<{ default }>` (v2's looser signature did), so unwrap
+            // `.default` here rather than returning the module record from the loader.
+            const local = localPages[name];
             if (local) {
-                return local();
+                return local().then((module) => module.default);
             }
 
             const entry = federatedIndex[name];
             if (entry) {
-                return resolveFederatedPage(name, entry);
+                return resolveFederatedPage(name, entry).then((module) => module.default);
             }
 
-            throw new Error(`Inertia page not found: ./pages/${name}.tsx`);
+            throw pageNotFoundError(name);
         },
         setup({ el, App, props }) {
             const sharedName = (props.initialPage.props as { name?: string }).name;

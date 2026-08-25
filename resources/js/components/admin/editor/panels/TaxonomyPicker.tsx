@@ -228,7 +228,7 @@ export default function TaxonomyPicker({
                             type="button"
                             onClick={submitCreate}
                             disabled={submitting || draftName.trim() === ''}
-                            className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             Add
                         </button>

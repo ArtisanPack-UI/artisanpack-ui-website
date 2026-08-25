@@ -108,7 +108,7 @@ export default function SiteDesign({ site, active_theme: activeTheme }: SiteDesi
                                 {/* an Inertia page, so it needs a full page load. */}
                                 <a
                                     href={editorRoot}
-                                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary/90"
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-content shadow-sm hover:bg-primary-hover"
                                 >
                                     {Icon.edit}
                                     Open visual editor

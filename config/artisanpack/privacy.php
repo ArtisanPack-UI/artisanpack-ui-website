@@ -457,7 +457,7 @@ return [
 	'scheduling' => [
 		/*
 		| Keystone wires every recurring privacy command explicitly in
-		| App\Providers\PrivacyServiceProvider so the schedule is discoverable
+		| Modules\Privacy\Providers\PrivacyServiceProvider so the schedule is discoverable
 		| in one place. Leaving the package's built-in auto-registration on
 		| would double-book the purge command, so it's disabled here.
 		*/
@@ -502,8 +502,8 @@ return [
 	'admin' => [
 		/*
 		| Keystone replaces the package's Livewire admin dashboard with
-		| the Inertia/React screens under `resources/js/pages/admin/privacy`
-		| (see `App\Http\Controllers\Admin\PrivacyAdminController`), so we
+		| the Inertia/React screens under `Modules/Privacy/resources/js/pages/admin/privacy`
+		| (see `Modules\Privacy\Http\Controllers\PrivacyAdminController`), so we
 		| turn the vendor's admin web routes off to avoid a route-name
 		| collision under the same `admin/privacy` prefix. The JSON API
 		| under `/api/privacy/admin/*` (governed by `routes.enabled`)

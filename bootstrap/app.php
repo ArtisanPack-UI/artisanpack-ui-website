@@ -4,12 +4,12 @@ use App\Http\Middleware\EnsureFeatureIsEnabled;
 use App\Http\Middleware\EnsureSiteIsAccessible;
 use App\Http\Middleware\EnsureTwoFactorEnrollment;
 use App\Http\Middleware\HandleInertiaRequests;
-use App\Http\Middleware\InjectPrivacyBanner;
-use App\Http\Middleware\Installed;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
+use Modules\Installer\Http\Middleware\Installed;
+use Modules\Privacy\Http\Middleware\InjectPrivacyBanner;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
